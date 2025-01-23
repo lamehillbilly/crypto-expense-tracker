@@ -1,0 +1,38 @@
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:dmTfbelwCWlvfIYleZaUnOFJyBejFosI@junction.proxy.rlwy.net:32425/railway"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Entry {
+  id            Int      @id @default(autoincrement())
+  type          String
+  amount        Float
+  date          DateTime
+  txn           String?
+  tokenName     String?
+  purchaseAmount Float
+  purchaseDate   DateTime
+  status        String
+  closeAmount   Float?
+  closeDate     DateTime?
+  pnl           Float?
+  daysHeld      Int?
+  expenseDetails Json?
+  claimDetails   Json?
+}
+
+model Trade {
+  id             Int      @id @default(autoincrement())
+  tokenName      String
+  purchaseAmount Float
+  purchaseDate   DateTime
+  status         String
+  closeAmount    Float?
+  closeDate      DateTime?
+  pnl            Float?
+  daysHeld       Int?
+} 
