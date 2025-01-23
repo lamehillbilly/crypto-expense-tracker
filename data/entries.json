@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1737673750840,
+    "type": "Claims",
+    "amount": 1000,
+    "date": "2025-01-23",
+    "txn": "",
+    "purchaseAmount": 0,
+    "purchaseDate": "",
+    "status": "open",
+    "claimDetails": {
+      "totalAmount": 1000,
+      "tokenTags": [
+        {
+          "decimals": 18,
+          "id": "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7",
+          "name": "Wrapped AVAX",
+          "price": 35.56134650783336,
+          "symbol": "WAVAX"
+        },
+        {
+          "decimals": 8,
+          "id": "0x152b9d0fdc40c096757f570a51e494bd4b943e50",
+          "name": "Bitcoin",
+          "price": 104193.4405825018,
+          "symbol": "BTC.b"
+        }
+      ],
+      "heldForTaxes": true,
+      "taxPercentage": null,
+      "taxAmount": null
+    }
+  },
+  {
+    "id": 1737673775520,
+    "type": "Claims",
+    "amount": 2333,
+    "date": "2025-01-23",
+    "txn": "",
+    "purchaseAmount": 0,
+    "purchaseDate": "",
+    "status": "open",
+    "claimDetails": {
+      "tokenId": "",
+      "tokenSymbol": "",
+      "tokenAmount": 0,
+      "tokenPrice": 0,
+      "totalValue": 0,
+      "tokenTags": [
+        {
+          "decimals": 6,
+          "id": "0x00000000efe302beaa2b3e6e1b18d08d69a9012a",
+          "name": "AUSD",
+          "price": 1.0004317548191786,
+          "symbol": "AUSD"
+        },
+        {
+          "decimals": 18,
+          "id": "0xacfb898cff266e53278cc0124fc2c7c94c8cb9a5",
+          "name": "AVAX HAS NO CHILL",
+          "price": 0.0013462239791653932,
+          "symbol": "NOCHILL"
+        }
+      ],
+      "totalAmount": 2333,
+      "heldForTaxes": true,
+      "taxPercentage": 25,
+      "taxAmount": 583.25
+    }
+  },
+  {
+    "id": 1737674167131,
+    "type": "Claims",
+    "amount": 1000,
+    "date": "2025-01-02",
+    "txn": "",
+    "purchaseAmount": 0,
+    "purchaseDate": "",
+    "status": "open",
+    "claimDetails": {
+      "totalAmount": 1000,
+      "tokenTags": [
+        {
+          "decimals": 18,
+          "id": "0x14b1669f19d99ca8458af6d19bc0e8219e5a305b",
+          "name": "Ambassador",
+          "price": 0.000020467900586748824,
+          "symbol": "BASS"
+        },
+        {
+          "decimals": 18,
+          "id": "0x2b2c81e08f1af8835a78bb2a90ae924ace0ea4be",
+          "name": "Staked AVAX",
+          "price": 36.256252058016905,
+          "symbol": "sAVAX"
+        }
+      ],
+      "heldForTaxes": true,
+      "taxAmount": 200
+    }
+  }
+]
