@@ -1,64 +1,79 @@
 // app/api/entries/route.ts
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+import { Entry, Trade } from '@/types';
 
 export async function GET() {
   try {
-    const entries = await prisma.entry.findMany({
-      orderBy: {
-        date: 'desc'
-      }
-    });
-
-    const trades = await prisma.trade.findMany({
-      where: {
-        status: 'open'
-      }
-    });
+    const [entries, trades] = await Promise.all([
+      prisma.entry.findMany({
+        orderBy: {
+          date: 'desc'
+        }
+      }),
+      prisma.trade.findMany({
+        where: {
+          status: 'open'
+        }
+      })
+    ]);
 
     return NextResponse.json({ entries, trades });
-  } catch {
-    return NextResponse.json({ error: 'Failed to load entries' }, { status: 500 });
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch data' },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
-    
-    if (data.type === 'Trades' && data.status === 'open') {
-      const trade = await prisma.trade.create({
-        data: {
-          tokenName: data.tokenName,
-          purchaseAmount: data.purchaseAmount,
-          purchaseDate: new Date(data.purchaseDate).toISOString(),
-          status: 'open'
-        }
-      });
-      return NextResponse.json(trade);
-    }
+    const { entries, trades } = await request.json();
 
-    const entry = await prisma.entry.create({
-      data: {
-        type: data.type,
-        amount: data.amount,
-        date: new Date(data.date),
-        txn: data.txn,
-        tokenName: data.tokenName,
-        pnl: data.pnl,
-        daysHeld: data.daysHeld,
-        expenseDetails: data.expenseDetails,
-        claimDetails: data.claimDetails,
-        purchaseAmount: data.purchaseAmount || 0,
-        purchaseDate: new Date(data.purchaseDate || data.date).toISOString(),
-        status: data.status || 'open'
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Create new entries
+      for (const entry of entries) {
+        await tx.entry.create({
+          data: {
+            type: entry.type,
+            amount: entry.amount,
+            date: new Date(entry.date),
+            txn: entry.txn || null,
+            tokenName: entry.tokenName || null,
+            pnl: entry.pnl || null,
+            daysHeld: entry.daysHeld || null,
+            expenseDetails: entry.expenseDetails || null,
+            claimDetails: entry.claimDetails || null,
+            purchaseAmount: entry.purchaseAmount || 0,
+            purchaseDate: new Date(entry.purchaseDate || entry.date).toISOString(),
+            status: entry.status || 'open'
+          }
+        });
+      }
+
+      // Create new trades
+      for (const trade of trades) {
+        await tx.trade.create({
+          data: {
+            tokenName: trade.tokenName,
+            purchaseAmount: trade.purchaseAmount,
+            purchaseDate: new Date(trade.purchaseDate).toISOString(),
+            status: trade.status,
+            closeAmount: trade.closeAmount || null,
+            closeDate: trade.closeDate ? new Date(trade.closeDate).toISOString() : null,
+            pnl: trade.pnl || null,
+            daysHeld: trade.daysHeld || null
+          }
+        });
       }
     });
 
-    return NextResponse.json(entry);
-  } catch {
-    return NextResponse.json({ error: 'Failed to save entries' }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
   }
 }
