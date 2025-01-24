@@ -1,24 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Crypto Expense Tracker
 
-## Getting Started
+A web application for tracking cryptocurrency expenses, trades, and tax obligations.
 
-First, run the development server:
+## Features
 
+- Track expenses, trades, and claims
+- Calculate tax obligations
+- Generate tax summaries
+- Visualize data with charts
+- PostgreSQL database with Prisma ORM
+
+## Setup
+
+1. Clone the repository
+2. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Set up your environment variables:
+```bash
+cp .env.example .env
+```
+Then edit `.env` with your database credentials.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Set up the database:
+```bash
+npx prisma generate
+npx prisma migrate dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+5. Run the development server:
+```bash
+npm run dev
+```
+
+## Technologies Used
+
+- Next.js 13+ (App Router)
+- TypeScript
+- Prisma ORM
+- PostgreSQL
+- Tailwind CSS
+- Recharts
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in your values:
+
+- `DATABASE_URL`: Your PostgreSQL connection string
+- `ADMIN_USERNAME`: Admin login username
+- `ADMIN_PASSWORD`: Admin login password
+- `JWT_SECRET`: Secret key for JWT tokens
 
 ## Learn More
 
