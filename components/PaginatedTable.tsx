@@ -1,11 +1,12 @@
 // components/PaginatedTable.tsx
 import React, { useState, useMemo } from 'react';
 import { Entry } from '@/types';
-import { ChevronLeft, ChevronRight, ArrowUpDown, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUpDown, Search, Trash2 } from 'lucide-react';
 
 interface PaginatedTableProps {
   entries: Entry[];
   itemsPerPage?: number;
+  onDelete: (id: number) => Promise<void>;
 }
 
 type SortField = 'date' | 'type' | 'amount' | 'pnl';
@@ -13,7 +14,8 @@ type SortDirection = 'asc' | 'desc';
 
 export const PaginatedTable: React.FC<PaginatedTableProps> = ({ 
   entries,
-  itemsPerPage = 10 
+  itemsPerPage = 10,
+  onDelete
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(itemsPerPage);
@@ -36,6 +38,7 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
       setSortDirection('desc');
     }
   };
+  
 
   const filteredAndSortedEntries = useMemo(() => {
     let result = [...entries];
@@ -87,12 +90,20 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
 
     return result;
   }, [entries, sortField, sortDirection, filters]);
-
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const totalPages = Math.ceil(filteredAndSortedEntries.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
   const currentEntries = filteredAndSortedEntries.slice(startIndex, endIndex);
   const pageSizeOptions = [5, 10, 25, 50];
+  const handleDelete = async (id: number) => {
+    try {
+      await onDelete(id);
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+    }
+  };
 
   // Reset page when filters change
   React.useEffect(() => {
@@ -112,7 +123,7 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
           ))}
           {entry.claimDetails.heldForTaxes && (
             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-              Tax Hold: ${entry.claimDetails.taxAmount?.toFixed(2)}
+              Tax Hold: ${entry.claimDetails.taxAmount?.toFixed(2) || '0.00'}
             </span>
           )}
         </div>
@@ -211,6 +222,7 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
                 </div>
               </th>
               <th className="p-2 text-left">Details</th>
+              <th className="p-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -219,18 +231,42 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
                 <td className="p-2">{new Date(entry.date).toLocaleDateString()}</td>
                 <td className="p-2">{entry.type}</td>
                 <td className="p-2 text-right whitespace-nowrap">
-                  ${entry.amount.toFixed(2)}
+                  ${entry.amount?.toFixed(2) || '0.00'}
                   {entry.pnl !== undefined && (
                     <span 
                       className={`ml-2 ${entry.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}
                       title={entry.daysHeld ? `${entry.daysHeld} day hold` : undefined}
                     >
-                      (P/L: ${entry.pnl.toFixed(2)})
+                      (P/L: ${entry.pnl?.toFixed(2) || '0.00'})
                     </span>
                   )}
                 </td>
-                <td className="p-2">
-                  {renderDetails(entry)}
+                <td className="p-2">{renderDetails(entry)}</td>
+                <td className="p-2 text-right">
+                  {deleteConfirm === entry.id ? (
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirm(entry.id)}
+                      className="p-1 text-gray-500 hover:text-red-500"
+                      title="Delete entry"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

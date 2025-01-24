@@ -12,15 +12,22 @@ const TYPES: TransactionType[] = ['Expense', 'Held for Taxes', 'Trades', 'Income
 const COLORS: string[] = ['#FF8042', '#FFBB28', '#00C49F', '#0088FE', '#8884d8'];
 
 // If using API routes for data persistence
-const saveToJSON = async (entries: Entry[], trades: Trade[]) => {
+const saveToDatabase = async (newEntries: Entry[], newTrades: Trade[]) => {
   try {
-    await fetch('/api/save-data', {
+    const response = await fetch('/api/entries', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ entries, trades }),
+      body: JSON.stringify({
+        entries: newEntries,
+        trades: newTrades,
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error('Failed to save data');
+    }
   } catch (error) {
     console.error('Error saving data:', error);
   }
@@ -34,8 +41,6 @@ const Dashboard: React.FC = () => {
   const [amount, setAmount] = useState<string>('');
   const [txn, setTxn] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [selectedTrade, setSelectedTrade] = useState<string>('');
-  const [tokenName, setTokenName] = useState<string>('');
   const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '' });
   const [claimDetails, setClaimDetails] = useState<ClaimDetails>({
     totalAmount: 0,
@@ -46,10 +51,9 @@ const Dashboard: React.FC = () => {
   });
 
   useEffect(() => {
-    // Load initial data
     const loadData = async () => {
       try {
-        const response = await fetch('/api/load-data');
+        const response = await fetch('/api/entries');
         if (!response.ok) {
           throw new Error('Failed to load data');
         }
@@ -58,11 +62,6 @@ const Dashboard: React.FC = () => {
         setOpenTrades(data.trades || []);
       } catch (error) {
         console.error('Error loading data:', error);
-        // Fallback to localStorage
-        const savedEntries = localStorage.getItem('entries');
-        const savedTrades = localStorage.getItem('openTrades');
-        if (savedEntries) setEntries(JSON.parse(savedEntries));
-        if (savedTrades) setOpenTrades(JSON.parse(savedTrades));
       }
     };
 
@@ -72,71 +71,70 @@ const Dashboard: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    let newEntry: Entry = {
-      id: Date.now(),
-      type: selectedType as TransactionType,
-      amount: parseFloat(amount),
-      date,
-      txn: selectedType !== 'Income' && selectedType !== 'Trades' ? txn : undefined,
-      purchaseAmount: 0,
-      purchaseDate: '',
-      status: 'open'
-    };
+    if (selectedType === 'Claims') {
+      // Create the main claim entry
+      const newEntry: Entry = {
+        id: Date.now(),
+        type: 'Claims',
+        amount: parseFloat(amount),
+        date,
+        claimDetails,
+        purchaseAmount: 0,
+        purchaseDate: '',
+        status: 'open'
+      };
 
-    if (selectedType === 'Expense') {
-      newEntry.expenseDetails = expenseDetails;
-    } else if (selectedType === 'Claims') {
-      newEntry.claimDetails = claimDetails;
-    } else if (selectedType === 'Trades') {
-      if (selectedTrade === 'New Entry') {
-        const newTrade: Trade = {
-          tokenName,
-          purchaseAmount: parseFloat(amount),
-          purchaseDate: date,
-          status: 'open',
-          id: Date.now()
+      // If holding for taxes, create a separate entry
+      const entries = [newEntry];
+      if (claimDetails.heldForTaxes && claimDetails.taxAmount) {
+        const taxEntry: Entry = {
+          id: Date.now() + 1,
+          type: 'Claims',
+          amount: claimDetails.taxAmount,
+          date,
+          claimDetails: {
+            ...claimDetails,
+            totalAmount: claimDetails.taxAmount,
+            heldForTaxes: true
+          },
+          purchaseAmount: 0,
+          purchaseDate: '',
+          status: 'open'
         };
-        setOpenTrades(prev => [...prev, newTrade]);
-        await saveToJSON(entries, [...openTrades, newTrade]);
-      } else {
-        const trade = openTrades.find(t => t.tokenName === selectedTrade);
-        if (trade) {
-          const updatedTrades = openTrades.filter(t => t.tokenName !== selectedTrade);
-          const closedTrade: Trade = {
-            ...trade,
-            status: 'closed',
-            closeAmount: parseFloat(amount),
-            closeDate: date,
-            pnl: parseFloat(amount) - trade.purchaseAmount
-          };
-          newEntry = {
-            ...newEntry,
-            tokenName: trade.tokenName,
-            pnl: closedTrade.pnl
-          };
-          setOpenTrades(updatedTrades);
-          await saveToJSON([...entries, newEntry], updatedTrades);
-        }
+        entries.push(taxEntry);
       }
-    }
 
-    const newEntries = [...entries, newEntry];
-    setEntries(newEntries);
-    await saveToJSON(newEntries, openTrades);
+      setEntries(prev => [...prev, ...entries]);
+      await saveToDatabase([...entries, ...entries], openTrades);
+    } else {
+      const newEntry: Entry = {
+        id: Date.now(),
+        type: selectedType as TransactionType,
+        amount: parseFloat(amount),
+        date,
+        txn: selectedType !== 'Income' ? txn : undefined,
+        purchaseAmount: 0,
+        purchaseDate: '',
+        status: 'open'
+      };
+
+      if (selectedType === 'Expense') {
+        newEntry.expenseDetails = expenseDetails;
+      }
+
+      setEntries(prev => [...prev, newEntry]);
+      await saveToDatabase([...entries, newEntry], openTrades);
+    }
 
     // Reset form
     setSelectedType('');
     setAmount('');
     setTxn('');
-    setTokenName('');
-    setSelectedTrade('');
     setExpenseDetails({ description: '' });
     setClaimDetails({
       totalAmount: 0,
-      tokenTags: [],  // This will be Token[]
-      heldForTaxes: false,
-      taxPercentage: undefined,
-      taxAmount: undefined
+      tokenTags: [],
+      heldForTaxes: false
     });
   };
 
@@ -165,7 +163,7 @@ const Dashboard: React.FC = () => {
     };
 
     setOpenTrades(prev => [...prev, newTrade]);
-    saveToJSON(entries, [...openTrades, newTrade]);
+    saveToDatabase(entries, [...openTrades, newTrade]);
     
     // Reset form
     setSelectedType('');
@@ -189,11 +187,28 @@ const Dashboard: React.FC = () => {
 
     setOpenTrades(updatedTrades);
     setEntries(prev => [...prev, closedTrade]);
-    saveToJSON([...entries, closedTrade], updatedTrades);
+    saveToDatabase([...entries, closedTrade], updatedTrades);
     
     // Reset form
     setSelectedType('');
     setAmount('');
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch(`/api/entries/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete entry');
+      }
+
+      // Update local state after successful deletion
+      setEntries(prevEntries => prevEntries.filter(entry => entry.id !== id));
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+    }
   };
 
   return (
@@ -355,7 +370,7 @@ const Dashboard: React.FC = () => {
           {/* Entries Table */}
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-bold mb-4">Recent Entries</h2>
-            <PaginatedTable entries={entries.slice().reverse()} />
+            <PaginatedTable entries={entries.slice().reverse()} onDelete={handleDelete}/>
           </div>
         </div>
       </main>
