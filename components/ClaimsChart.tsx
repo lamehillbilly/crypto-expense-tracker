@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartConfig } from "@/components/ui/chart";
 
 interface ClaimData {
   date: string;
@@ -13,6 +12,23 @@ interface ClaimData {
 interface ChartProps {
   data: ClaimData[];
   timeframe: 'day' | 'week' | 'month';
+}
+
+interface ChartData {
+  date: string;
+  total: number;
+  tokenTotals: Record<string, number>;
+}
+
+interface TokenTotal {
+  token: string;
+  amount: number;
+}
+
+interface GroupedData {
+  date: string;
+  total: number;
+  tokenTotals: Record<string, number>;
 }
 
 const chartConfig = {
@@ -30,7 +46,7 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
     );
 
     // Group data by timeframe
-    const groupedData = sortedData.reduce((acc, item) => {
+    const groupedData: Record<string, GroupedData> = sortedData.reduce((acc, item) => {
       const date = new Date(item.date);
       // Adjust for timezone offset
       const localDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
@@ -67,7 +83,7 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
       }
 
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, GroupedData>);
 
     return Object.values(groupedData);
   }, [data, timeframe]);
@@ -90,29 +106,48 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
       year: timeframe === 'week' ? 'numeric' : undefined
     });
   };
-  const CustomTooltip = ({ active, payload, label }: any) => {
+
+  const formatValue = (value: number) => {
+    return `$${value.toLocaleString()}`;
+  };
+
+  const CustomTooltip = ({ 
+    active, 
+    payload, 
+    label 
+  }: { 
+    active?: boolean; 
+    payload?: Array<{ payload: ChartData; value: number }>; 
+    label?: string; 
+  }) => {
     if (active && payload && payload.length > 0) {
-      const data = payload[0].payload;
+      const data: ChartData = payload[0].payload;
       
+      // Convert token totals to array for rendering
+      const tokenTotals: TokenTotal[] = Object.entries(data.tokenTotals || {}).map(([token, amount]) => ({
+        token,
+        amount
+      }));
+
       return (
         <div className="bg-secondary border border-gray-200 p-4 rounded-lg shadow-lg min-w-[200px]">
-          <p className="font-semibold border-b pb-2 mb-2">{formatDate(label)}</p>
+          <p className="font-semibold border-b pb-2 mb-2">{formatDate(label || '')}</p>
           <div className="space-y-2">
             {/* Total amount */}
             <p className="text-sm flex justify-between items-center font-medium">
               <span>Total:</span>
-              <span>${Number(data.total).toLocaleString()}</span>
+              <span>{formatValue(data.total)}</span>
             </p>
             {/* Token breakdown */}
             {data.tokenTotals && Object.keys(data.tokenTotals).length > 0 && (
               <div className="pt-2 border-t">
                 <p className="text-xs text-gray-500 mb-1">Token Breakdown:</p>
-                {Object.entries(data.tokenTotals as Record<string, number>)
-                  .sort((a, b) => b[1] - a[1]) // Sort by amount descending
-                  .map(([token, amount]) => (
+                {tokenTotals
+                  .sort((a, b) => b.amount - a.amount) // Sort by amount descending
+                  .map(({ token, amount }) => (
                     <p key={token} className="text-sm flex justify-between items-center">
                       <span>{token}:</span>
-                      <span>${Number(amount).toLocaleString()}</span>
+                      <span>{formatValue(amount)}</span>
                     </p>
                   ))}
               </div>
@@ -164,7 +199,7 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
                   tickMargin={8}
                 />
                 <YAxis
-                  tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+                  tickFormatter={formatValue}
                   domain={['auto', 'auto']}
                   axisLine={false}
                   tickLine={false}

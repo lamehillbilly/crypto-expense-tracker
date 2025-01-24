@@ -98,8 +98,12 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     <div className="space-y-4">
       <TokenSelect
         tokens={data || []} 
-        selectedTokens={details.tokenTags?.map(tag => ({ id: tag, name: tag, decimals: 0, price: 0, symbol: '' })) || []}
-        onTokensChange={(newTokens) => onChange({ ...details, tokenTags: newTokens.map(token => token.id) })}
+        selectedTokens={data?.filter((token: { symbol: string; }) => 
+          details.tokenTags?.includes(token.symbol)
+        ) || []}
+        onTokensChange={(newToken) => {
+          onChange({ ...details, tokenTags: [...(details.tokenTags || []), newToken.symbol] })
+        }}
       />
 
       <div className="relative">

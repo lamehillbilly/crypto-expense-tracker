@@ -1,14 +1,13 @@
 // components/TokenSelect.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { Token } from '@/types';
-import { X, Search } from 'lucide-react';
 
 interface TokenSelectProps {
   value?: string;
   tokens?: Token[];
   onTokensChange: (token: Token) => void;
   placeholder?: string;
-  selectedTokens?: string[];
+  selectedTokens?: Token[];
 }
 
 export function TokenSelect({ 
@@ -23,20 +22,13 @@ export function TokenSelect({
 
   const filteredTokens = tokens.filter(token => 
     token.symbol.toLowerCase().includes(search.toLowerCase()) &&
-    !selectedTokens.includes(token.symbol)
+    !selectedTokens.some(selected => selected.id === token.id)
   );
 
   const handleTokenSelect = (token: Token) => {
     onTokensChange(token);
     setIsOpen(false);
     setSearch('');
-  };
-  const handleTokenRemove = (tokenId: string) => {
-    const updatedTokens = selectedTokens.filter(id => id !== tokenId);
-    const token = tokens.find(t => t.id === tokenId);
-    if (token) {
-      onTokensChange(token);
-    }
   };
 
   // Click outside to close
