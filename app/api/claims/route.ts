@@ -87,7 +87,7 @@ function toJsonObject(claimDetails: ClaimDetails) {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    const { date, tokenClaims = [], totalAmount, heldForTaxes, taxAmount } = data;
+    const { date, tokenDetails, totalAmount, heldForTaxes, taxAmount, txn } = data;
 
     const existingClaim = await prisma.entry.findFirst({
       where: {
@@ -101,25 +101,26 @@ export async function POST(request: Request) {
       const existingTokenClaims = Array.isArray(claimDetails?.tokenClaims) 
         ? claimDetails.tokenClaims 
         : [];
-      const newTokenClaims = Array.isArray(tokenClaims) ? tokenClaims : [];
+      const newTokenClaims = Array.isArray(tokenDetails) ? tokenDetails : [];
 
       const updatedClaimDetails: ClaimDetails = {
-          tokenTags: [],
-          tokenClaims: [...existingTokenClaims, ...newTokenClaims],
-          totalAmount: claimDetails?.totalAmount + totalAmount || totalAmount,
-          heldForTaxes: heldForTaxes || false,
-          taxAmount: heldForTaxes ?
-              (claimDetails?.taxAmount || 0) + (taxAmount || 0)
-              : undefined,
-          date,
-          taxPercentage: undefined
+        tokenTags: [],
+        tokenClaims: [...existingTokenClaims, ...newTokenClaims],
+        totalAmount: claimDetails?.totalAmount + totalAmount || totalAmount,
+        heldForTaxes: heldForTaxes || false,
+        taxAmount: heldForTaxes ?
+            (claimDetails?.taxAmount || 0) + (taxAmount || 0)
+            : undefined,
+        date,
+        taxPercentage: undefined
       };
 
       const updatedClaim = await prisma.entry.update({
         where: { id: existingClaim.id },
         data: {
           amount: updatedClaimDetails.totalAmount,
-          claimDetails: toJsonObject(updatedClaimDetails)  // Convert to plain object
+          claimDetails: toJsonObject(updatedClaimDetails),
+          txn: txn || null  // Update txn field
         }
       });
 
@@ -127,13 +128,13 @@ export async function POST(request: Request) {
     }
 
     const newClaimDetails: ClaimDetails = {
-        tokenTags: [],
-        tokenClaims: Array.isArray(tokenClaims) ? tokenClaims : [],
-        totalAmount,
-        heldForTaxes: heldForTaxes || false,
-        taxAmount,
-        date,
-        taxPercentage: undefined
+      tokenTags: [],
+      tokenClaims: Array.isArray(tokenDetails) ? tokenDetails : [],
+      totalAmount,
+      heldForTaxes: heldForTaxes || false,
+      taxAmount,
+      date,
+      taxPercentage: undefined
     };
 
     const newClaim = await prisma.entry.create({
@@ -141,7 +142,8 @@ export async function POST(request: Request) {
         type: 'Claims',
         date: new Date(date),
         amount: totalAmount,
-        claimDetails: toJsonObject(newClaimDetails),  // Convert to plain object
+        claimDetails: toJsonObject(newClaimDetails),
+        txn: txn || null,  // Include txn field
         purchaseAmount: 0,
         purchaseDate: new Date(),
         status: 'open'

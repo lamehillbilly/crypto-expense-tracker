@@ -93,7 +93,7 @@ export const TaxSummary: React.FC<TaxSummaryProps> = ({ entries }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg">
+    <div className="bg-accent p-6 rounded-lg shadow-lg border border-foreground">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Tax Summary</h2>
         <button
@@ -107,22 +107,22 @@ export const TaxSummary: React.FC<TaxSummaryProps> = ({ entries }) => {
       {isExpanded && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="p-4 bg-blue-50 rounded">
-              <p className="text-sm text-blue-600">Total Tax Held</p>
+            <div className="p-4 border border-foreground rounded">
+              <p className="text-sm text-foreground">Total Tax Held</p>
               <p className="text-2xl font-bold">${taxSummary.totalHeld.toFixed(2)}</p>
             </div>
             
-            <div className="p-4 bg-green-50 rounded">
-              <p className="text-sm text-green-600">Total Claims</p>
+              <div className="p-4 border border-foreground rounded">
+              <p className="text-sm text-foreground">Total Claims</p>
               <p className="text-2xl font-bold">{taxSummary.totalClaims}</p>
             </div>
             
-            <div className="p-4 bg-purple-50 rounded">
-              <p className="text-sm text-purple-600">Average Tax Rate</p>
+            <div className="p-4 border border-foreground rounded">
+              <p className="text-sm text-foreground">Average Tax Rate</p>
               <p className="text-2xl font-bold">{taxSummary.averageTaxRate.toFixed(1)}%</p>
             </div>
             
-            <div className="p-4 bg-orange-50 rounded cursor-pointer" onClick={downloadTaxReport}>
+            <div className="p-4 border border-foreground rounded" onClick={downloadTaxReport}>
               <p className="text-sm text-orange-600 flex items-center">
                 Download Report
                 <Download className="ml-2 h-4 w-4" />
@@ -137,7 +137,7 @@ export const TaxSummary: React.FC<TaxSummaryProps> = ({ entries }) => {
               <select
                 value={yearFilter}
                 onChange={(e) => setYearFilter(e.target.value)}
-                className="p-2 border rounded"
+                className="p-2 border rounded bg-foreground text-primary"
               >
                 <option value="all">All Years</option>
                 {years.map(year => (

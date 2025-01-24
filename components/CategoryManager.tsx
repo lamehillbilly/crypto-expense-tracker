@@ -1,89 +1,92 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import { toast } from 'sonner';
 
-export function CategoryManager() {
-  const [categories, setCategories] = useState<string[]>([]);
+interface CategoryManagerProps {
+  onCategoryChange?: () => void;
+  existingCategories: string[];
+  onAddCategory: (category: string) => Promise<boolean>;
+  onDeleteCategory: (category: string) => Promise<boolean>;
+}
+
+export function CategoryManager({ 
+  existingCategories, 
+  onAddCategory,
+  onDeleteCategory 
+}: CategoryManagerProps) {
   const [newCategory, setNewCategory] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const response = await fetch('/api/categories');
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(data);
-      }
-    } catch (error) {
-      console.error('Error loading categories:', error);
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    console.log('Submitting new category:', newCategory);
+    
+    if (!newCategory.trim() || isLoading) {
+      console.log('Invalid submission:', { newCategory, isLoading });
+      return;
     }
-  };
 
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCategory.trim()) return;
-
+    setIsLoading(true);
     try {
-      const response = await fetch('/api/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCategory.trim() })
-      });
-
-      if (response.ok) {
-        await loadCategories();
+      console.log('Calling onAddCategory with:', newCategory.trim());
+      const success = await onAddCategory(newCategory.trim());
+      console.log('Add category result:', success);
+      
+      if (success) {
         setNewCategory('');
+        toast.success('Category added successfully');
       }
     } catch (error) {
-      console.error('Error adding category:', error);
-    }
-  };
-
-  const handleRemoveCategory = async (category: string) => {
-    try {
-      const response = await fetch('/api/categories', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: category })
-      });
-
-      if (response.ok) {
-        await loadCategories();
-      }
-    } catch (error) {
-      console.error('Error removing category:', error);
+      console.error('Error in handleSubmit:', error);
+      toast.error('Failed to add category');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <form onSubmit={handleAddCategory} className="flex gap-2">
+    <div className="space-y-3">
+      <div className="flex gap-2">
         <input
           type="text"
           value={newCategory}
           onChange={(e) => setNewCategory(e.target.value)}
-          placeholder="New category"
-          className="flex-1 p-2 border rounded"
+          placeholder="New category name"
+          className="flex-1 px-3 py-1 text-sm border rounded-md bg-background text-foreground"
+          disabled={isLoading}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
         />
         <button
-          type="submit"
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          type="button"
+          onClick={() => handleSubmit()}
+          className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+          disabled={isLoading || !newCategory.trim()}
         >
-          Add
+          {isLoading ? 'Adding...' : 'Add'}
         </button>
-      </form>
+      </div>
 
-      <div className="space-y-2">
-        {categories.map(category => (
-          <div key={category} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+      <div className="flex flex-wrap gap-2">
+        {existingCategories.map((category) => (
+          <div
+            key={category}
+            className="group flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-md text-sm hover:bg-primary/20 transition-colors"
+          >
             <span>{category}</span>
             <button
-              onClick={() => handleRemoveCategory(category)}
-              className="text-red-600 hover:text-red-800"
+              type="button"
+              onClick={() => onDeleteCategory(category)}
+              className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 transition-opacity"
+              aria-label={`Delete ${category} category`}
+              disabled={isLoading}
             >
-              Remove
+              <X className="h-3 w-3" />
             </button>
           </div>
         ))}
