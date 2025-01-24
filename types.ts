@@ -1,5 +1,7 @@
 // types.ts
 
+import { ReactNode } from "react";
+
 // Token interface from API
 export interface Token {
     decimals: number;
@@ -9,38 +11,50 @@ export interface Token {
     symbol: string;
   }
   
-  export type TransactionType = 'Expense' | 'Held for Taxes' | 'Trades' | 'Income' | 'Claims';
+  export type TransactionType = 'Expense' | 'Income' | 'Trades' | 'Claims';
   
   // Enhanced expense interface
   export interface ExpenseDetails {
-    category?: string;
     description: string;
-    vendor?: string;
+    vendor: string;
+    category?: string;
   }
   
   // Interface for claims
   export interface ClaimDetails {
+    taxPercentage: ReactNode;
+    tokenTags: string[];
+    tokenClaims: TokenClaim[];
     totalAmount: number;
-    tokenTags?: Token[];
     heldForTaxes: boolean;
-    taxPercentage?: number;
     taxAmount?: number;
+    date: string;
   }
   
   export interface Trade {
+    pnl: null;
+    daysHeld: null;
+    purchaseAmount: any;
     id: number;
+    tokenName: string;
+    amount: number;
+    purchaseDate: string;
+    closeAmount?: number;
+    closeDate?: string;
+    status: 'open' | 'closed';
+  }
+  
+  export interface TradeDetails {
     tokenName: string;
     purchaseAmount: number;
     purchaseDate: string;
-    status: 'open' | 'closed';
     closeAmount?: number;
     closeDate?: string;
-    pnl?: number;
-    daysHeld?: number;
   }
   
   export interface Entry {
-    id: number;
+    tradeDetails: TradeDetails;
+    id?: number;
     type: TransactionType;
     amount: number;
     date: string;
@@ -48,15 +62,12 @@ export interface Token {
     tokenName?: string;
     purchaseAmount: number;
     purchaseDate: string;
-    status: 'open' | 'closed';
-    closeAmount?: number;
-    closeDate?: string;
+    status: string;
     pnl?: number;
     daysHeld?: number;
     expenseDetails?: ExpenseDetails;
     claimDetails?: ClaimDetails;
   }
-  
   export interface PieChartData {
     name: string;
     value: number;
@@ -81,4 +92,19 @@ export interface Token {
     };
     totalClaims: number;
     averageTaxRate: number;
+  }
+
+  export interface TokenClaim {
+    totalAmount: number;
+    tokenClaims: boolean;
+    tokenId: string;
+    tokenSymbol: string;
+    amount: number;
+  }
+  
+  export interface DailyClaimAggregate {
+    date: string;
+    claims: ClaimDetails[];
+    totalAmount: number;
+    tokenTotals: Record<string, number>;
   }
