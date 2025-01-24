@@ -1,26 +1,27 @@
 'use client'
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trade, Entry, TransactionType, ExpenseDetails } from '@/types';
-import { ExpenseForm } from '@/components/ExpenseForm';
-import { TradeForm } from '@/components/TradeForm';
+import { Entry, TransactionType, ExpenseDetails } from '@/types';
 import { PaginatedTable } from '@/components/PaginatedTable';
 import { ExpenseCategoryChart } from '@/components/ExpenseCategoryChart';
 import { DistributionOverview } from '@/components/DistributionOverview';
 import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-
-const TYPES: TransactionType[] = ['Expense', 'Trades', 'Income'];
+import { NewEntryDialog } from '@/components/NewEntryDialog';
 
 const Dashboard: React.FC = () => {
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [openTrades, setOpenTrades] = useState<Trade[]>([]);
   const [selectedType, setSelectedType] = useState<TransactionType | ''>('');
   const [amount, setAmount] = useState<string>('');
   const [txn, setTxn] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '', vendor: '' });
+  const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ 
+    description: '', 
+    vendor: '', 
+    taxDeductible: false 
+  });
   const [showCharts, setShowCharts] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
+  const [showTaxDeductible, setShowTaxDeductible] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -29,11 +30,6 @@ const Dashboard: React.FC = () => {
         if (!entriesResponse.ok) throw new Error('Failed to load entries');
         const entriesData = await entriesResponse.json();
         setEntries(entriesData);
-
-        const tradesResponse = await fetch('/api/trades?status=open');
-        if (!tradesResponse.ok) throw new Error('Failed to load trades');
-        const tradesData = await tradesResponse.json();
-        setOpenTrades(tradesData);
       } catch (error) {
         console.error('Error loading data:', error);
         toast.error('Failed to load some data');
@@ -75,7 +71,7 @@ const Dashboard: React.FC = () => {
       setSelectedType('');
       setAmount('');
       setTxn('');
-      setExpenseDetails({ description: '', vendor: '' });
+      setExpenseDetails({ description: '', vendor: '', taxDeductible: false });
       setShowNewEntry(false);
       toast.success('Entry added successfully');
     } catch (error) {
@@ -90,58 +86,6 @@ const Dashboard: React.FC = () => {
     setDate(entry.date);
     if (entry.txn) setTxn(entry.txn);
     if (entry.expenseDetails) setExpenseDetails(entry.expenseDetails);
-  };
-
-  const handleNewTrade = async (tokenName: string, amount: number) => {
-    try {
-      const response = await fetch('/api/trades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokenName,
-          amount,
-          purchaseDate: new Date().toISOString(),
-          status: 'open'
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to create trade');
-      const newTrade = await response.json();
-      setOpenTrades(prev => [...prev, newTrade]);
-      toast.success('Trade created successfully');
-    } catch (error) {
-      console.error('Error creating trade:', error);
-      toast.error('Failed to create trade');
-    }
-  };
-
-  const handleCloseTrade = async (tradeId: number, closeAmount: number, originalAmount: number) => {
-    const profit = closeAmount - originalAmount;
-    
-    if (profit > 0) {
-      const taxAmount = profit * 0.30;
-      toast.info(`Remember to set aside $${taxAmount.toFixed(2)} (30% of $${profit.toFixed(2)} profit) for taxes.`);
-    }
-
-    try {
-      const response = await fetch(`/api/trades/${tradeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          closeAmount,
-          closeDate: new Date().toISOString(),
-          status: 'closed'
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to close trade');
-      
-      setOpenTrades(prev => prev.filter(t => t.id !== tradeId));
-      toast.success('Trade closed successfully');
-    } catch (error) {
-      console.error('Error closing trade:', error);
-      toast.error('Failed to close trade');
-    }
   };
 
   const handleDelete = async (id: number) => {
@@ -179,117 +123,47 @@ const Dashboard: React.FC = () => {
     return { totalIncome, totalExpenses, totalClaims, totalTrades };
   }, [entries]);
 
+  const filteredEntries = useMemo(() => {
+    return entries.filter(entry => {
+      if (showTaxDeductible && entry.type === 'Expense') {
+        return entry.expenseDetails?.taxDeductible;
+      }
+      return true;
+    });
+  }, [entries, showTaxDeductible]);
+
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      {/* New Entry Section */}
-      <div className="bg-card rounded-lg">
+    <div className="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+      {/* Header Section */}
+      <div className="flex justify-between items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">Track your expenses and trades</p>
+        </div>
         <button
-          onClick={() => setShowNewEntry(!showNewEntry)}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+          onClick={() => setShowNewEntry(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
-          <div className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            <h2 className="text-lg font-semibold">New Entry</h2>
-          </div>
-          {showNewEntry ? (
-            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-          )}
+          <Plus className="h-4 w-4" />
+          New Entry
         </button>
-
-        {showNewEntry && (
-          <div className="p-4 pt-0">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    Type
-                  </label>
-                  <select
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value as TransactionType)}
-                    className="w-full p-2 rounded-md border bg-background text-foreground"
-                    required
-                  >
-                    <option value="">Select type</option>
-                    {TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full p-2 rounded-md border bg-background text-foreground"
-                    placeholder="0.00"
-                    step="0.01"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-2 rounded-md border bg-background text-foreground"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    Transaction ID
-                  </label>
-                  <input
-                    type="text"
-                    value={txn}
-                    onChange={(e) => setTxn(e.target.value)}
-                    className="w-full p-2 rounded-md border bg-background text-foreground"
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
-
-              {selectedType === 'Expense' && (
-                <ExpenseForm
-                  details={expenseDetails}
-                  onChange={setExpenseDetails}
-                />
-              )}
-
-              {selectedType === 'Trades' && (
-                <TradeForm
-                  onNewTrade={handleNewTrade}
-                  onCloseTrade={handleCloseTrade}
-                  openTrades={openTrades}
-                />
-              )}
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                >
-                  Save Entry
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
       </div>
+
+      <NewEntryDialog
+        open={showNewEntry}
+        onClose={() => setShowNewEntry(false)}
+        onSubmit={handleSubmit}
+        selectedType={selectedType}
+        setSelectedType={setSelectedType}
+        amount={amount}
+        setAmount={setAmount}
+        txn={txn}
+        setTxn={setTxn}
+        date={date}
+        setDate={setDate}
+        expenseDetails={expenseDetails}
+        setExpenseDetails={setExpenseDetails}
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -356,13 +230,25 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Table Section */}
-      <div className="bg-card rounded-lg p-4">
-        <PaginatedTable 
-          entries={entries} 
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-        />
+      <div className="flex items-center gap-4 mb-4">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={showTaxDeductible}
+            onChange={(e) => setShowTaxDeductible(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm font-medium">
+            Show Tax Deductible Only
+          </span>
+        </label>
       </div>
+
+      <PaginatedTable 
+        entries={filteredEntries} 
+        onDelete={handleDelete}
+        onEdit={handleEdit}
+      />
     </div>
   );
 }

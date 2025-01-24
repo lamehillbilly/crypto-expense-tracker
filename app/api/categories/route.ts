@@ -8,7 +8,7 @@ export async function GET() {
         name: 'asc'
       }
     });
-    return NextResponse.json(categories.map(cat => cat.name));
+    return NextResponse.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
     return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
@@ -21,18 +21,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', body);
 
-    const { category } = body;
+    const { name } = body;
     
-    if (!category || typeof category !== 'string') {
-      console.log('Invalid category data:', { category });
+    if (!name || typeof name !== 'string') {
+      console.log('Invalid category data:', { name });
       return NextResponse.json(
         { error: 'Category name is required and must be a string' },
         { status: 400 }
       );
     }
 
-    const trimmedCategory = category.trim();
-    if (!trimmedCategory) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       return NextResponse.json(
         { error: 'Category name cannot be empty' },
         { status: 400 }
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const existingCategory = await prisma.category.findFirst({
       where: {
         name: {
-          equals: trimmedCategory,
+          equals: trimmedName,
           mode: 'insensitive'
         }
       }
@@ -58,10 +58,10 @@ export async function POST(request: Request) {
     }
 
     // Create new category
-    console.log('Creating new category:', trimmedCategory);
+    console.log('Creating new category:', trimmedName);
     const newCategory = await prisma.category.create({
       data: {
-        name: trimmedCategory
+        name: trimmedName,
       }
     });
     console.log('Created category:', newCategory);
