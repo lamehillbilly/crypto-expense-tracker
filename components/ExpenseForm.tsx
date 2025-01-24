@@ -12,7 +12,7 @@ interface ExpenseFormProps {
 
 export function ExpenseForm({ details, onChange }: ExpenseFormProps) {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchCategories = async () => {
@@ -36,6 +36,22 @@ export function ExpenseForm({ details, onChange }: ExpenseFormProps) {
 
   const handleCategoryChange = async () => {
     await fetchCategories();
+  };
+
+  const handleDeleteCategory = async (category: string) => {
+    try {
+      const response = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete category');
+
+      await handleCategoryChange();
+      toast.success('Category deleted successfully');
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast.error('Failed to delete category');
+    }
   };
 
   return (
@@ -77,16 +93,16 @@ export function ExpenseForm({ details, onChange }: ExpenseFormProps) {
           {showCategoryManager && (
             <div className="mb-4 p-4 bg-muted/50 rounded-md">
               <CategoryManager 
-                onCategoryChange={handleCategoryChange}
-                existingCategories={categories}
-                onAddCategory={async (newCategory) => {
+                categories={categories}
+                onCategoriesChange={handleCategoryChange}
+                onAddCategory={async (newCategory: string) => {
                   try {
                     const response = await fetch('/api/categories', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
                       },
-                      body: JSON.stringify({ category: newCategory }),
+                      body: JSON.stringify({ name: newCategory }),
                     });
 
                     if (!response.ok) {
@@ -102,25 +118,10 @@ export function ExpenseForm({ details, onChange }: ExpenseFormProps) {
                     toast.error(error instanceof Error ? error.message : 'Failed to add category');
                     return false;
                   }
-                }}
-                onDeleteCategory={async (category) => {
-                  try {
-                    const response = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
-                      method: 'DELETE',
-                    });
-
-                    if (!response.ok) throw new Error('Failed to delete category');
-
-                    await handleCategoryChange();
-                    toast.success('Category deleted successfully');
-                    return true;
-                  } catch (error) {
-                    console.error('Error deleting category:', error);
-                    toast.error('Failed to delete category');
-                    return false;
-                  }
-                }}
-              />
+                } }
+                onDeleteCategory={handleDeleteCategory} onCategoryAdded={function (): void {
+                  throw new Error('Function not implemented.');
+                } }              />
             </div>
           )}
           <select
@@ -133,11 +134,24 @@ export function ExpenseForm({ details, onChange }: ExpenseFormProps) {
           >
             <option value="">Select category</option>
             {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
+              <option key={category.id} value={category.name}>
+                {category.name}
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="taxDeductible"
+            checked={details.taxDeductible || false}
+            onChange={(e) => onChange({ ...details, taxDeductible: e.target.checked })}
+            className="rounded border-gray-300"
+          />
+          <label htmlFor="taxDeductible" className="text-sm font-medium">
+            Tax Deductible Expense
+          </label>
         </div>
       </div>
     </div>

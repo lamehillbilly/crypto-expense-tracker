@@ -15,6 +15,7 @@ export interface Token {
   
   // Enhanced expense interface
   export interface ExpenseDetails {
+    taxDeductible: boolean;
     description: string;
     vendor: string;
     category?: string;
@@ -118,4 +119,10 @@ export interface Token {
     tokenTotals?: Record<string, number>;
     taxAmount?: number;
     txn?: string;
+  }
+
+  export interface Category {
+    id: string;
+    name: string;
+    taxDeductible: boolean;
   }
