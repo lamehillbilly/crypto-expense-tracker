@@ -1,19 +1,22 @@
 // app/api/claims/[id]/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ClaimDetails, DailyClaimAggregate, TokenClaim } from '@/types';
-import { Prisma } from '@prisma/client';
+
+interface TokenDetail {
+  tokenSymbol: string;
+  amount: number;
+}
 
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
-) {
+): Promise<Response> {
   try {
     const id = parseInt(params.id);
     const body = await request.json();
     const { date, tokenDetails, totalAmount, heldForTaxes, taxAmount, txn } = body;
 
-    const tokenClaims = tokenDetails.map((token: any) => ({
+    const tokenClaims = tokenDetails.map((token: TokenDetail) => ({
       tokenSymbol: token.tokenSymbol,
       amount: Number(token.amount)
     }));

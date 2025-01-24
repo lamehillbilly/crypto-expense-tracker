@@ -1,19 +1,15 @@
 'use client'
 import React, { useState, useEffect, useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Trade, Entry, TransactionType, ExpenseDetails } from '@/types';
 import { ExpenseForm } from '@/components/ExpenseForm';
 import { TradeForm } from '@/components/TradeForm';
 import { PaginatedTable } from '@/components/PaginatedTable';
-import { TaxSummary } from '@/components/TaxSummary';
 import { ExpenseCategoryChart } from '@/components/ExpenseCategoryChart';
-import { CategoryManager } from '@/components/CategoryManager';
 import { DistributionOverview } from '@/components/DistributionOverview';
 import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TYPES: TransactionType[] = ['Expense', 'Trades', 'Income'];
-const COLORS: string[] = ['#FF8042', '#00C49F', '#0088FE'];
 
 const Dashboard: React.FC = () => {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -23,7 +19,6 @@ const Dashboard: React.FC = () => {
   const [txn, setTxn] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '', vendor: '' });
-  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [showCharts, setShowCharts] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
 
@@ -90,7 +85,6 @@ const Dashboard: React.FC = () => {
   };
 
   const handleEdit = (entry: Entry) => {
-    setEditingEntry(entry);
     setSelectedType(entry.type);
     setAmount(entry.amount.toString());
     setDate(entry.date);

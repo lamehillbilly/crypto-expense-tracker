@@ -15,6 +15,7 @@ interface TokenDetail {
   amount: number;
 }
 
+
 interface EditClaimDialogProps {
   claim: {
     id: string;
@@ -32,6 +33,7 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
   const { tokens } = useTokens();
   const [date, setDate] = useState('');
   const [tokenDetails, setTokenDetails] = useState<TokenDetail[]>([]);
+  const [selectedTokens, setSelectedTokens] = useState<Token[]>([]);
   const [taxAmount, setTaxAmount] = useState<number>(0);
   const [txn, setTxn] = useState('');
 
@@ -44,10 +46,15 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
           amount
         }))
       );
+      setSelectedTokens(
+        tokens?.filter(token => 
+          Object.keys(claim.tokenTotals).includes(token.symbol)
+        ) || []
+      );
       setTaxAmount(claim.taxAmount || 0);
       setTxn(claim.txn || '');
     }
-  }, [claim]);
+  }, [claim, tokens]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,10 +95,6 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
       };
       return updated;
     });
-  };
-
-  const addToken = () => {
-    setTokenDetails(prev => [...prev, { tokenSymbol: '', amount: 0 }]);
   };
 
   const removeToken = (index: number) => {
@@ -151,24 +154,15 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
               <label className="block text-sm font-medium mb-2">Add New Token</label>
               <div className="flex gap-2">
                 <TokenSelect
-                  tokens={tokens}
-                  onTokensChange={(token: Token) => {
-                    // Check if token already exists
-                    const exists = tokenDetails.some(t => t.tokenSymbol === token.symbol);
-                    if (!exists) {
-                      setTokenDetails(prev => [
-                        ...prev,
-                        { 
-                          tokenSymbol: token.symbol, 
-                          amount: 0 
-                        }
-                      ]);
-                      toast.success(`Added ${token.symbol}`);
-                    } else {
-                      toast.error(`${token.symbol} already exists in this claim`);
-                    }
+                  tokens={tokens || []}
+                  selectedTokens={selectedTokens}
+                  onTokensChange={(token) => {
+                    setSelectedTokens([...selectedTokens, token]);
+                    setTokenDetails([
+                      ...tokenDetails,
+                      { tokenSymbol: token.symbol, amount: 0 }
+                    ]);
                   }}
-                  selectedTokens={tokenDetails.map(t => t.tokenSymbol)}
                   placeholder="Select token"
                 />
               </div>

@@ -207,7 +207,7 @@ export default function ClaimsPage() {
                 </div>
                 <TokenSelect
                   tokens={tokens}
-                  selectedTokens={selectedTokens.map(t => t.id)}
+                  selectedTokens={selectedTokens}
                   onTokensChange={(token: Token) => {
                     if (!selectedTokens.find(t => t.id === token.id)) {
                       setSelectedTokens([...selectedTokens, token]); 

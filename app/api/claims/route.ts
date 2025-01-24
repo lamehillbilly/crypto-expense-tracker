@@ -1,8 +1,7 @@
 // app/api/claims/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ClaimDetails, DailyClaimAggregate, TokenClaim } from '@/types';
-import { Prisma } from '@prisma/client';
+import { ClaimDetails, TokenClaim } from '@/types';
 
 interface TokenDetail {
   tokenSymbol: string;
@@ -23,19 +22,6 @@ interface JsonClaimDetails {
   taxAmount?: number;
   heldForTaxes: boolean;
   date: string;
-}
-
-interface DbClaim {
-  id: number;
-  type: string;
-  amount: number;
-  date: Date;
-  txn: string | null;
-  expenseDetails: Prisma.JsonValue;
-  claimDetails: Prisma.JsonValue;
-  purchaseAmount: number;
-  purchaseDate: Date;
-  status: string;
 }
 
 // Get all claims with daily aggregation
@@ -157,7 +143,12 @@ function mergeTokenClaims(existing: TokenClaim[], newClaims: TokenClaim[]): Toke
 }
 
 // Helper function to transform claim response
-function transformClaimResponse(claim: any) {
+function transformClaimResponse(claim: {
+  id: number;
+  date: Date;
+  txn: string | null;
+  claimDetails: unknown;
+}) {
   const claimDetails = claim.claimDetails as unknown as JsonClaimDetails;
   const tokenTotals: Record<string, number> = {};
   let calculatedTotal = 0;
