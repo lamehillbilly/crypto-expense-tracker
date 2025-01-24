@@ -30,12 +30,18 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch('/api/entries');
-        if (!response.ok) throw new Error('Failed to load data');
-        const data = await response.json();
-        setEntries(data);
+        const entriesResponse = await fetch('/api/entries');
+        if (!entriesResponse.ok) throw new Error('Failed to load entries');
+        const entriesData = await entriesResponse.json();
+        setEntries(entriesData);
+
+        const tradesResponse = await fetch('/api/trades?status=open');
+        if (!tradesResponse.ok) throw new Error('Failed to load trades');
+        const tradesData = await tradesResponse.json();
+        setOpenTrades(tradesData);
       } catch (error) {
         console.error('Error loading data:', error);
+        toast.error('Failed to load some data');
       }
     };
 
@@ -108,8 +114,10 @@ const Dashboard: React.FC = () => {
       if (!response.ok) throw new Error('Failed to create trade');
       const newTrade = await response.json();
       setOpenTrades(prev => [...prev, newTrade]);
+      toast.success('Trade created successfully');
     } catch (error) {
       console.error('Error creating trade:', error);
+      toast.error('Failed to create trade');
     }
   };
 
@@ -118,7 +126,7 @@ const Dashboard: React.FC = () => {
     
     if (profit > 0) {
       const taxAmount = profit * 0.30;
-      alert(`Remember to set aside $${taxAmount.toFixed(2)} (30% of $${profit.toFixed(2)} profit) for taxes.`);
+      toast.info(`Remember to set aside $${taxAmount.toFixed(2)} (30% of $${profit.toFixed(2)} profit) for taxes.`);
     }
 
     try {
@@ -135,8 +143,10 @@ const Dashboard: React.FC = () => {
       if (!response.ok) throw new Error('Failed to close trade');
       
       setOpenTrades(prev => prev.filter(t => t.id !== tradeId));
+      toast.success('Trade closed successfully');
     } catch (error) {
       console.error('Error closing trade:', error);
+      toast.error('Failed to close trade');
     }
   };
 
@@ -263,6 +273,14 @@ const Dashboard: React.FC = () => {
                 <ExpenseForm
                   details={expenseDetails}
                   onChange={setExpenseDetails}
+                />
+              )}
+
+              {selectedType === 'Trades' && (
+                <TradeForm
+                  onNewTrade={handleNewTrade}
+                  onCloseTrade={handleCloseTrade}
+                  openTrades={openTrades}
                 />
               )}
 

@@ -22,4 +22,28 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'Failed to create trade' }, { status: 500 });
   }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+
+    const trades = await prisma.trade.findMany({
+      where: status ? {
+        status: status
+      } : undefined,
+      orderBy: {
+        purchaseDate: 'desc'
+      }
+    });
+
+    return NextResponse.json(trades);
+  } catch (error) {
+    console.error('Error fetching trades:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch trades' },
+      { status: 500 }
+    );
+  }
 } 

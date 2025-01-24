@@ -37,4 +37,27 @@ model Category {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+model Claim {
+  id           String        @id @default(cuid())
+  date         DateTime
+  taxAmount    Float?
+  txn          String?
+  tokenAmounts TokenAmount[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([date])
+}
+
+model TokenAmount {
+  id      String @id @default(cuid())
+  token   String
+  amount  Float
+  claim   Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  claimId String
+
+  @@index([claimId])
+  @@index([token])
 } 
