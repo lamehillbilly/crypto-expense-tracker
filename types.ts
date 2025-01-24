@@ -53,6 +53,8 @@ export interface Token {
   }
   
   export interface Entry {
+    tokenTotals: {};
+    totalAmount: any;
     tradeDetails: TradeDetails;
     id?: number;
     type: TransactionType;
@@ -107,4 +109,13 @@ export interface Token {
     claims: ClaimDetails[];
     totalAmount: number;
     tokenTotals: Record<string, number>;
+  }
+
+  export interface Claim {
+    id: string;
+    date: string;
+    totalAmount: number;
+    tokenTotals?: Record<string, number>;
+    taxAmount?: number;
+    txn?: string;
   }

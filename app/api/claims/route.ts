@@ -4,13 +4,25 @@ import { prisma } from '@/lib/prisma';
 import { ClaimDetails, DailyClaimAggregate, TokenClaim } from '@/types';
 import { Prisma } from '@prisma/client';
 
-// Create a proper type for the JSON claim details
-interface JsonClaimDetails {
-  tokenClaims?: TokenClaim[];
-  totalAmount?: number;
-  heldForTaxes?: boolean;
+interface TokenDetail {
+  tokenSymbol: string;
+  amount: number;
+}
+
+interface ClaimRequestBody {
+  date: string;
+  tokenDetails: TokenDetail[];
+  totalAmount: number;
+  heldForTaxes: boolean;
   taxAmount?: number;
-  date?: string;
+  txn?: string;
+}
+
+interface JsonClaimDetails {
+  tokenClaims: TokenClaim[];
+  taxAmount?: number;
+  heldForTaxes: boolean;
+  date: string;
 }
 
 interface DbClaim {
@@ -27,56 +39,7 @@ interface DbClaim {
 }
 
 // Get all claims with daily aggregation
-export async function GET() {
-  try {
-    const claims = await prisma.entry.findMany({
-      where: { type: 'Claims' },
-      orderBy: { date: 'desc' }
-    });
 
-    // Aggregate claims by date
-    const dailyAggregates: { [date: string]: DailyClaimAggregate } = {};
-
-    claims.forEach((claim: DbClaim) => {
-      const dateStr = new Date(claim.date).toISOString().split('T')[0];
-      
-      if (!dailyAggregates[dateStr]) {
-        dailyAggregates[dateStr] = {
-          date: dateStr,
-          claims: [],
-          totalAmount: 0,
-          tokenTotals: {}
-        };
-      }
-
-      const aggregate = dailyAggregates[dateStr];
-      aggregate.totalAmount += claim.amount;
-
-      // Safely parse the JSON claimDetails
-      const claimDetails = claim.claimDetails as JsonClaimDetails;
-      if (claimDetails && typeof claimDetails === 'object' && !Array.isArray(claimDetails)) {
-        const parsedClaim = claimDetails as ClaimDetails;
-        if (parsedClaim.tokenClaims) {
-          parsedClaim.tokenClaims.forEach((tokenClaim: TokenClaim) => {
-            aggregate.tokenTotals[tokenClaim.tokenSymbol] = 
-              (aggregate.tokenTotals[tokenClaim.tokenSymbol] || 0) + tokenClaim.amount;
-          });
-        }
-        aggregate.claims.push(parsedClaim);
-      }
-    });
-
-    return NextResponse.json(Object.values(dailyAggregates));
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error fetching claims:', error.message);
-    }
-    return NextResponse.json(
-      { error: 'Failed to fetch claims' },
-      { status: 500 }
-    );
-  }
-}
 
 // Helper function to convert ClaimDetails to a plain object
 function toJsonObject(claimDetails: ClaimDetails) {
@@ -86,73 +49,188 @@ function toJsonObject(claimDetails: ClaimDetails) {
 // Create new claim with daily aggregation
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
-    const { date, tokenDetails, totalAmount, heldForTaxes, taxAmount, txn } = data;
+    const body: ClaimRequestBody = await request.json();
+    const { date, tokenDetails, totalAmount, heldForTaxes, taxAmount, txn } = body;
+    console.log('Received claim request:', { date, tokenDetails, totalAmount, taxAmount, txn });
 
+    // Check if there's an existing claim for this date
     const existingClaim = await prisma.entry.findFirst({
       where: {
         type: 'Claims',
-        date: new Date(date)
+        date: {
+          gte: new Date(date + 'T00:00:00.000Z'),
+          lt: new Date(date + 'T23:59:59.999Z')
+        }
       }
     });
 
     if (existingClaim) {
-      const claimDetails = existingClaim.claimDetails as JsonClaimDetails;
-      const existingTokenClaims = Array.isArray(claimDetails?.tokenClaims) 
-        ? claimDetails.tokenClaims 
-        : [];
-      const newTokenClaims = Array.isArray(tokenDetails) ? tokenDetails : [];
-
-      const updatedClaimDetails: ClaimDetails = {
-        tokenTags: [],
-        tokenClaims: [...existingTokenClaims, ...newTokenClaims],
-        totalAmount: claimDetails?.totalAmount + totalAmount || totalAmount,
-        heldForTaxes: heldForTaxes || false,
-        taxAmount: heldForTaxes ?
-            (claimDetails?.taxAmount || 0) + (taxAmount || 0)
-            : undefined,
-        date,
-        taxPercentage: undefined
-      };
+      // Merge with existing claim
+      const existingDetails = existingClaim.claimDetails as unknown as JsonClaimDetails;
+      const existingTokenClaims = existingDetails?.tokenClaims || [];
+      const newTokenClaims = tokenDetails.map((token: TokenDetail) => ({
+        tokenSymbol: token.tokenSymbol,
+        amount: Number(token.amount)
+      }));
+      // Combine token claims
+      const mergedTokenClaims = mergeTokenClaims(
+        existingTokenClaims as TokenClaim[], 
+        newTokenClaims as TokenClaim[]
+      );
+      const mergedTotal = mergedTokenClaims.reduce((sum, token) => sum + token.amount, 0);
 
       const updatedClaim = await prisma.entry.update({
         where: { id: existingClaim.id },
         data: {
-          amount: updatedClaimDetails.totalAmount,
-          claimDetails: toJsonObject(updatedClaimDetails),
-          txn: txn || null  // Update txn field
+          amount: mergedTotal,
+          claimDetails: toJsonObject({
+            tokenClaims: mergedTokenClaims,
+            taxAmount: (existingDetails?.taxAmount || 0) + (taxAmount || 0),
+            heldForTaxes: heldForTaxes || existingDetails?.heldForTaxes,
+            date: date + 'T12:00:00.000Z',
+            taxPercentage: 0,
+            tokenTags: mergedTokenClaims.map(t => t.tokenSymbol),
+            totalAmount: mergedTotal
+          }),
         }
       });
 
-      return NextResponse.json(updatedClaim);
+      return NextResponse.json(transformClaimResponse(updatedClaim));
     }
 
-    const newClaimDetails: ClaimDetails = {
-      tokenTags: [],
-      tokenClaims: Array.isArray(tokenDetails) ? tokenDetails : [],
-      totalAmount,
-      heldForTaxes: heldForTaxes || false,
-      taxAmount,
-      date,
-      taxPercentage: undefined
-    };
+    // Create new claim if no existing one
+    const tokenClaims = tokenDetails.map((token: TokenDetail) => ({
+      tokenSymbol: token.tokenSymbol,
+      amount: Number(token.amount)
+    }));
 
-    const newClaim = await prisma.entry.create({
+    const claim = await prisma.entry.create({
       data: {
         type: 'Claims',
-        date: new Date(date),
+        date: new Date(`${date}T12:00:00.000-00:00`),
+        txn: txn || null,
         amount: totalAmount,
-        claimDetails: toJsonObject(newClaimDetails),
-        txn: txn || null,  // Include txn field
+        claimDetails: {
+          tokenClaims,
+          taxAmount,
+          heldForTaxes,
+          date: `${date}T12:00:00.000-00:00`
+        },
         purchaseAmount: 0,
         purchaseDate: new Date(),
         status: 'open'
-      }
+      },
     });
 
-    return NextResponse.json(newClaim);
+    return NextResponse.json(transformClaimResponse(claim));
   } catch (error) {
-    console.error('Error creating claim:', error);
-    return NextResponse.json({ error: 'Failed to create claim' }, { status: 500 });
+    console.error('Detailed error creating claim:', error);
+    return NextResponse.json({ 
+      error: 'Failed to create claim',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
+
+// Helper function to merge token claims
+function mergeTokenClaims(existing: TokenClaim[], newClaims: TokenClaim[]): TokenClaim[] {
+  const merged = new Map<string, number>();
+  
+  // Add existing claims
+  existing.forEach(claim => {
+    merged.set(claim.tokenSymbol, (merged.get(claim.tokenSymbol) || 0) + claim.amount);
+  });
+  
+  // Add new claims
+  newClaims.forEach(claim => {
+    merged.set(claim.tokenSymbol, (merged.get(claim.tokenSymbol) || 0) + claim.amount);
+  });
+  
+  // Convert back to array
+  return Array.from(merged.entries()).map(([tokenSymbol, amount]) => ({
+    tokenSymbol,
+    amount,
+    tokenId: tokenSymbol,
+    tokenClaims: false,
+    totalAmount: amount
+  }));
+}
+
+// Helper function to transform claim response
+function transformClaimResponse(claim: any) {
+  const claimDetails = claim.claimDetails as unknown as JsonClaimDetails;
+  const tokenTotals: Record<string, number> = {};
+  let calculatedTotal = 0;
+
+  if (claimDetails?.tokenClaims) {
+    claimDetails.tokenClaims.forEach((token: { tokenSymbol: string; amount: number; }) => {
+      tokenTotals[token.tokenSymbol] = token.amount;
+      calculatedTotal += token.amount;
+    });
+  }
+
+  return {
+    id: claim.id,
+    date: claim.date.toISOString(),
+    totalAmount: calculatedTotal,
+    tokenTotals,
+    taxAmount: claimDetails?.taxAmount,
+    txn: claim.txn || undefined,
+  };
+}
+
+export async function GET() {
+  try {
+    console.log('Fetching claims...');
+    
+    const claims = await prisma.entry.findMany({
+      where: {
+        type: 'Claims'
+      },
+      orderBy: {
+        date: 'desc'
+      },
+    }).catch(error => {
+      console.error('Prisma error:', error);
+      throw error;
+    });
+
+    console.log('Raw claims from DB:', claims);
+
+    // Transform the data to include calculated totals
+    const transformedClaims = claims.map(claim => {
+      const tokenTotals: Record<string, number> = {};
+      let totalAmount = 0;
+
+      const claimDetails = claim.claimDetails as unknown as JsonClaimDetails;
+      if (claimDetails?.tokenClaims) {
+        claimDetails.tokenClaims.forEach(token => {
+          tokenTotals[token.tokenSymbol] = token.amount;
+          totalAmount += token.amount;
+        });
+      }
+
+      return {
+        id: claim.id,
+        date: claim.date.toISOString(),
+        totalAmount,
+        tokenTotals,
+        taxAmount: claimDetails?.taxAmount,
+        txn: claim.txn || undefined,
+      };
+    });
+
+    console.log('Transformed claims:', transformedClaims);
+
+    return NextResponse.json(transformedClaims);
+  } catch (error) {
+    console.error('Detailed error in GET /api/claims:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to fetch claims',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, 
+      { status: 500 }
+    );
   }
 }

@@ -4,34 +4,39 @@ import { Token } from '@/types';
 import { X, Search } from 'lucide-react';
 
 interface TokenSelectProps {
-  tokens: Token[];
-  selectedTokens: Token[];
-  onTokensChange: (tokens: Token[]) => void;
+  value?: string;
+  tokens?: Token[];
+  onTokensChange: (token: Token) => void;
+  placeholder?: string;
+  selectedTokens?: string[];
 }
 
-export const TokenSelect: React.FC<TokenSelectProps> = ({
-  tokens = [],  // Provide default empty array
-  selectedTokens = [],  // Provide default empty array
-  onTokensChange
-}) => {
-  const [searchTerm, setSearchTerm] = useState('');
+export function TokenSelect({ 
+  tokens = [], 
+  onTokensChange, 
+  placeholder = "Select token",
+  selectedTokens = []
+}: TokenSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filteredTokens = tokens.filter(token => 
-    !(selectedTokens || []).find(t => t.id === token.id) &&
-    (token.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     token.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    token.symbol.toLowerCase().includes(search.toLowerCase()) &&
+    !selectedTokens.includes(token.symbol)
   );
 
   const handleTokenSelect = (token: Token) => {
-    onTokensChange([...(selectedTokens || []), token]);
-    setSearchTerm('');
+    onTokensChange(token);
     setIsOpen(false);
+    setSearch('');
   };
-
   const handleTokenRemove = (tokenId: string) => {
-    onTokensChange((selectedTokens || []).filter(t => t.id !== tokenId));
+    const updatedTokens = selectedTokens.filter(id => id !== tokenId);
+    const token = tokens.find(t => t.id === tokenId);
+    if (token) {
+      onTokensChange(token);
+    }
   };
 
   // Click outside to close
@@ -47,62 +52,33 @@ export const TokenSelect: React.FC<TokenSelectProps> = ({
   }, []);
 
   return (
-    <div ref={containerRef} className="relative">
-      {/* Selected Tokens */}
-      <div className="flex flex-wrap gap-2 mb-2">
-        {(selectedTokens || []).map(token => (
-          <div 
-            key={token.id}
-            className="flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm"
-          >
-            {token.symbol}
-            <button
-              onClick={() => handleTokenRemove(token.id)}
-              className="ml-1 p-1 hover:text-blue-600"
+    <div ref={containerRef} className="relative w-full">
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        onFocus={() => setIsOpen(true)}
+        className="w-full p-2 border rounded"
+        placeholder={placeholder}
+      />
+      
+      {isOpen && (
+        <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
+          {filteredTokens.map((token) => (
+            <div
+              key={token.id}
+              onClick={() => handleTokenSelect(token)}
+              className="p-2 hover:bg-accent cursor-pointer flex items-center justify-between"
             >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => setIsOpen(true)}
-          placeholder="Search tokens..."
-          className="pl-9 w-full p-2 border rounded"
-        />
-      </div>
-
-      {/* Dropdown */}
-      {isOpen && searchTerm && (
-        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-          {filteredTokens.length > 0 ? (
-            filteredTokens.map(token => (
-              <button
-                key={token.id}
-                onClick={() => handleTokenSelect(token)}
-                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex justify-between items-center"
-              >
-                <span>{token.symbol} - {token.name}</span>
-                {token.price > 0 && (
-                  <span className="text-gray-500">${token.price.toFixed(2)}</span>
-                )}
-              </button>
-            ))
-          ) : (
-            <div className="px-4 py-2 text-gray-500">No tokens found</div>
+              <span>{token.symbol}</span>
+              <span className="text-sm text-muted-foreground">${token.price}</span>
+            </div>
+          ))}
+          {filteredTokens.length === 0 && (
+            <div className="p-2 text-muted-foreground">No tokens found</div>
           )}
         </div>
       )}
     </div>
   );
-};
+}
