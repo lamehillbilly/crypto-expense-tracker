@@ -1,272 +1,168 @@
 // components/PaginatedTable.tsx
+'use client';
 import React, { useState, useMemo } from 'react';
-import { Entry } from '@/types';
-import { ChevronLeft, ChevronRight, ArrowUpDown, Search, Trash2 } from 'lucide-react';
+import { Entry, ExpenseDetails, TradeDetails, TransactionType } from '@/types';
+import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 
 interface PaginatedTableProps {
   entries: Entry[];
-  itemsPerPage?: number;
-  onDelete: (id: number) => Promise<void>;
+  onDelete: (id: number) => void;
+  onEdit: (entry: Entry) => void;
 }
 
-type SortField = 'date' | 'type' | 'amount' | 'pnl';
-type SortDirection = 'asc' | 'desc';
+interface Filters {
+  search: string;
+  type?: TransactionType;
+}
 
-export const PaginatedTable: React.FC<PaginatedTableProps> = ({ 
-  entries,
-  itemsPerPage = 10,
-  onDelete
-}) => {
+type SortableFields = 'date' | 'type' | 'amount' | 'category';
+
+export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(itemsPerPage);
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [filters, setFilters] = useState({
-    type: '',
-    search: '',
-    dateRange: {
-      start: '',
-      end: ''
-    }
-  });
+  const [itemsPerPage] = useState(10);
+  const [filters, setFilters] = useState<Filters>({ search: '' });
+  const [sortField, setSortField] = useState<SortableFields>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
+  const handleSort = (field: SortableFields) => {
+    if (field === sortField) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection('asc');
     }
   };
-  
 
-  const filteredAndSortedEntries = useMemo(() => {
+  const filteredEntries = useMemo(() => {
     let result = [...entries];
 
-    // Apply filters
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter(entry => {
+        const description = entry.expenseDetails?.description?.toLowerCase() || '';
+        const txn = entry.txn?.toLowerCase() || '';
+        const tokenName = entry.type === 'Trades' 
+          ? (entry.tradeDetails as TradeDetails)?.tokenName?.toLowerCase() || ''
+          : '';
+
+        return description.includes(searchLower) || 
+               txn.includes(searchLower) || 
+               tokenName.includes(searchLower);
+      });
+    }
+
     if (filters.type) {
       result = result.filter(entry => entry.type === filters.type);
     }
 
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter(entry => 
-        entry.tokenName?.toLowerCase().includes(searchLower) ||
-        entry.txn?.toLowerCase().includes(searchLower)
-      );
-    }
+    return result;
+  }, [entries, filters]);
 
-    if (filters.dateRange.start) {
-      result = result.filter(entry => 
-        new Date(entry.date) >= new Date(filters.dateRange.start)
-      );
-    }
+  const sortedEntries = useMemo(() => {
+    return [...filteredEntries].sort((a, b) => {
+      const direction = sortDirection === 'asc' ? 1 : -1;
 
-    if (filters.dateRange.end) {
-      result = result.filter(entry => 
-        new Date(entry.date) <= new Date(filters.dateRange.end)
-      );
-    }
-
-    // Apply sorting
-    result.sort((a, b) => {
-      let comparison = 0;
       switch (sortField) {
         case 'date':
-          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
-          break;
+          return direction * (new Date(a.date).getTime() - new Date(b.date).getTime());
         case 'type':
-          comparison = a.type.localeCompare(b.type);
-          break;
+          return direction * a.type.localeCompare(b.type);
         case 'amount':
-          comparison = a.amount - b.amount;
-          break;
-        case 'pnl':
-          comparison = (a.pnl || 0) - (b.pnl || 0);
-          break;
+          return direction * (a.amount - b.amount);
+        case 'category':
+          const categoryA = (a.expenseDetails as ExpenseDetails)?.category || '';
+          const categoryB = (b.expenseDetails as ExpenseDetails)?.category || '';
+          return direction * categoryA.localeCompare(categoryB);
+        default:
+          return 0;
       }
-      return sortDirection === 'asc' ? comparison : -comparison;
     });
+  }, [filteredEntries, sortField, sortDirection]);
 
-    return result;
-  }, [entries, sortField, sortDirection, filters]);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const totalPages = Math.ceil(filteredAndSortedEntries.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentEntries = filteredAndSortedEntries.slice(startIndex, endIndex);
-  const pageSizeOptions = [5, 10, 25, 50];
-  const handleDelete = async (id: number) => {
-    try {
-      await onDelete(id);
-      setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting entry:', error);
-    }
-  };
+  const currentEntries = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedEntries.slice(startIndex, startIndex + itemsPerPage);
+  }, [currentPage, itemsPerPage, sortedEntries]);
 
-  // Reset page when filters change
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, pageSize]);
-  const renderDetails = (entry: Entry) => {
-    if (entry.type === 'Claims' && entry.claimDetails?.tokenTags) {
-      return (
-        <div className="flex flex-wrap gap-1">
-          {entry.claimDetails.tokenTags.map(token => (
-            <span 
-              key={token.id}
-              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-            >
-              {token.symbol}
-            </span>
-          ))}
-          {entry.claimDetails.heldForTaxes && (
-            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-              Tax Hold: ${entry.claimDetails.taxAmount?.toFixed(2) || '0.00'}
-            </span>
-          )}
-        </div>
-      );
-    }
+  const totalPages = Math.ceil(sortedEntries.length / itemsPerPage);
 
-    if (entry.type === 'Trades') {
-      return entry.tokenName ? `Token: ${entry.tokenName}` : '-';
-    }
-
-    if (entry.type === 'Expense' && entry.expenseDetails) {
-      return `${entry.expenseDetails.description}${entry.expenseDetails.vendor ? ` (${entry.expenseDetails.vendor})` : ''}`;
-    }
-
-    return entry.txn ? `TXN: ${entry.txn}` : '-';
-  };
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search entries..."
-            value={filters.search}
-            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-            className="pl-9 w-full p-2 border rounded"
-          />
-        </div>
-        
-        <select
-          value={filters.type}
-          onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
-          className="p-2 border rounded"
-        >
-          <option value="">All Types</option>
-          {['Expense', 'Held for Taxes', 'Trades', 'Income', 'Claims'].map(type => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
-
+      <div className="flex gap-4 mb-4">
         <input
-          type="date"
-          value={filters.dateRange.start}
-          onChange={(e) => setFilters(prev => ({
-            ...prev,
-            dateRange: { ...prev.dateRange, start: e.target.value }
-          }))}
-          className="p-2 border rounded"
-          placeholder="Start Date"
-        />
-
-        <input
-          type="date"
-          value={filters.dateRange.end}
-          onChange={(e) => setFilters(prev => ({
-            ...prev,
-            dateRange: { ...prev.dateRange, end: e.target.value }
-          }))}
-          className="p-2 border rounded"
-          placeholder="End Date"
+          type="text"
+          placeholder="Search..."
+          value={filters.search}
+          onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+          className="px-3 py-2 border rounded-md"
         />
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th 
-                className="p-2 text-left cursor-pointer hover:bg-gray-50"
-                onClick={() => handleSort('date')}
-              >
-                <div className="flex items-center">
-                  Date
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                </div>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              {['Date', 'Type', 'Amount', 'Category'].map((header) => (
+                <th
+                  key={header.toLowerCase()}
+                  onClick={() => handleSort(header.toLowerCase() as SortableFields)}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                >
+                  {header}
+                  {sortField === header.toLowerCase() && (
+                    <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </th>
+              ))}
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                TXN
               </th>
-              <th 
-                className="p-2 text-left cursor-pointer hover:bg-gray-50"
-                onClick={() => handleSort('type')}
-              >
-                <div className="flex items-center">
-                  Type
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                </div>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
               </th>
-              <th 
-                className="p-2 text-right cursor-pointer hover:bg-gray-50"
-                onClick={() => handleSort('amount')}
-              >
-                <div className="flex items-center justify-end">
-                  Amount
-                  <ArrowUpDown className="ml-1 h-4 w-4" />
-                </div>
-              </th>
-              <th className="p-2 text-left">Details</th>
-              <th className="p-2 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {currentEntries.map(entry => (
-              <tr key={entry.id} className="border-b">
-                <td className="p-2">{new Date(entry.date).toLocaleDateString()}</td>
-                <td className="p-2">{entry.type}</td>
-                <td className="p-2 text-right whitespace-nowrap">
-                  ${entry.amount?.toFixed(2) || '0.00'}
-                  {entry.pnl !== undefined && (
-                    <span 
-                      className={`ml-2 ${entry.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}
-                      title={entry.daysHeld ? `${entry.daysHeld} day hold` : undefined}
-                    >
-                      (P/L: ${entry.pnl?.toFixed(2) || '0.00'})
-                    </span>
-                  )}
+          <tbody className="bg-white divide-y divide-gray-200">
+            {currentEntries.map((entry) => (
+              <tr key={String(entry.id)} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(entry.date).toLocaleDateString()}
                 </td>
-                <td className="p-2">{renderDetails(entry)}</td>
-                <td className="p-2 text-right">
-                  {deleteConfirm === entry.id ? (
-                    <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => handleDelete(entry.id)}
-                        className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(null)}
-                        className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setDeleteConfirm(entry.id)}
-                      className="p-1 text-gray-500 hover:text-red-500"
-                      title="Delete entry"
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {entry.type}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  ${entry.amount?.toFixed(2) || '0.00'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {entry.type === 'Expense' ? entry.expenseDetails?.category || '-' : '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {entry.txn ? (
+                    <a
+                      href={entry.txn}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:text-blue-700"
+                      title={entry.txn}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  ) : '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button
+                    onClick={() => onEdit(entry)}
+                    className="text-indigo-600 hover:text-indigo-900 mr-4"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => onDelete(Number(entry.id))}
+                    className="text-red-600 hover:text-red-900"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             ))}
@@ -274,72 +170,27 @@ export const PaginatedTable: React.FC<PaginatedTableProps> = ({
         </table>
       </div>
 
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between border-t pt-4">
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-700">Rows per page:</span>
-          <select
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-            className="border rounded p-1 text-sm"
-          >
-            {pageSizeOptions.map(size => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-          <span className="text-sm text-gray-700">
-            Showing {startIndex + 1}-{Math.min(endIndex, filteredAndSortedEntries.length)} of {filteredAndSortedEntries.length}
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-2">
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-4">
           <button
-            onClick={() => setCurrentPage(prev => prev - 1)}
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 border rounded-md disabled:opacity-50"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-
-          <div className="flex items-center space-x-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(page => {
-                return (
-                  page === 1 ||
-                  page === totalPages ||
-                  Math.abs(page - currentPage) <= 1
-                );
-              })
-              .map((page, index, array) => (
-                <React.Fragment key={page}>
-                  {index > 0 && array[index - 1] !== page - 1 && (
-                    <span className="px-2">...</span>
-                  )}
-                  <button
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 rounded ${
-                      currentPage === page
-                        ? 'bg-blue-500 text-white'
-                        : 'hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                </React.Fragment>
-              ))}
-          </div>
-
+          <span className="text-sm text-gray-700">
+            Page {currentPage} of {totalPages}
+          </span>
           <button
-            onClick={() => setCurrentPage(prev => prev + 1)}
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 border rounded-md disabled:opacity-50"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
-};
+}

@@ -1,6 +1,6 @@
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://postgres:dmTfbelwCWlvfIYleZaUnOFJyBejFosI@junction.proxy.rlwy.net:32425/railway"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -8,31 +8,31 @@ generator client {
 }
 
 model Entry {
-  id            Int      @id @default(autoincrement())
-  type          String
-  amount        Float
-  date          DateTime
-  txn           String?
-  tokenName     String?
-  purchaseAmount Float
-  purchaseDate   DateTime
-  status        String
-  closeAmount   Float?
-  closeDate     DateTime?
-  pnl           Float?
-  daysHeld      Int?
+  id             Int      @id @default(autoincrement())
+  type           String
+  amount         Float
+  date           DateTime
+  txn            String?
   expenseDetails Json?
   claimDetails   Json?
+  purchaseAmount Float    @default(0)
+  purchaseDate   DateTime @default(now())
+  status         String   @default("open")
 }
 
 model Trade {
-  id             Int      @id @default(autoincrement())
-  tokenName      String
-  purchaseAmount Float
-  purchaseDate   DateTime
-  status         String
-  closeAmount    Float?
-  closeDate      DateTime?
-  pnl            Float?
-  daysHeld       Int?
+  id           Int       @id @default(autoincrement())
+  tokenName    String
+  amount       Float
+  purchaseDate DateTime
+  closeAmount  Float?
+  closeDate    DateTime?
+  status       String    @default("open")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 } 

@@ -43,9 +43,8 @@ export const TaxSummary: React.FC<TaxSummaryProps> = ({ entries }) => {
             summary.byYear[year] = 0;
           }
           summary.byYear[year] += entry.claimDetails.taxAmount;
-          
           if (entry.claimDetails.taxPercentage) {
-            totalTaxPercentage += entry.claimDetails.taxPercentage;
+            totalTaxPercentage += Number(entry.claimDetails.taxPercentage);
             taxEntryCount++;
           }
         }

@@ -4,84 +4,69 @@ import { Trade } from '@/types';
 
 interface TradeFormProps {
   openTrades: Trade[];
-  onNewTrade: (tokenName: string, amount: number, openDate: string) => void;
-  onCloseTrade: (trade: Trade, closeAmount: number, closeDate: string) => void;
+  onNewTrade: (tokenName: string, amount: number) => void;
+  onCloseTrade: (tradeId: number, closeAmount: number, originalAmount: number) => void;
 }
 
-export const TradeForm: React.FC<TradeFormProps> = ({
-  openTrades,
-  onNewTrade,
-  onCloseTrade,
-}) => {
-  const [selectedTrade, setSelectedTrade] = useState<string>('');
-  const [tokenName, setTokenName] = useState<string>('');
-  const [amount, setAmount] = useState<string>('');
-  const [openDate, setOpenDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [closeDate, setCloseDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [isClosingTrade, setIsClosingTrade] = useState<boolean>(false);
+export function TradeForm({ openTrades, onNewTrade, onCloseTrade }: TradeFormProps) {
+  const [tradeAmount, setTradeAmount] = useState('');
+  const [tokenName, setTokenName] = useState('');
+  const [selectedTradeId, setSelectedTradeId] = useState<number | ''>('');
+  const [closeAmount, setCloseAmount] = useState('');
 
   const handleTradeSelection = (value: string) => {
-    setSelectedTrade(value);
-    if (value !== 'New Entry') {
-      setIsClosingTrade(true);
-      const trade = openTrades.find(t => t.tokenName === value);
-      if (trade) {
-        setOpenDate(trade.purchaseDate);
-      }
-    } else {
-      setIsClosingTrade(false);
-      setTokenName('');
-      setAmount('');
-      setOpenDate(new Date().toISOString().split('T')[0]);
-    }
+    setSelectedTradeId(value === 'New Entry' ? '' : Number(value));
   };
 
-  const calculateDaysHeld = (start: string, end: string): number => {
+  const calculateDaysHeld = (start: string): number => {
     const startDate = new Date(start);
-    const endDate = new Date(end);
+    const endDate = new Date();
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const handleSubmit = () => {
-    if (selectedTrade === 'New Entry') {
-      onNewTrade(tokenName, parseFloat(amount), openDate);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (selectedTradeId === '') {
+      if (tokenName && tradeAmount) {
+        onNewTrade(tokenName, parseFloat(tradeAmount));
+      }
     } else {
-      const trade = openTrades.find(t => t.tokenName === selectedTrade);
-      if (trade) {
-        onCloseTrade(trade, parseFloat(amount), closeDate);
+      const trade = openTrades.find(t => t.id === selectedTradeId);
+      if (trade && closeAmount) {
+        onCloseTrade(selectedTradeId, parseFloat(closeAmount), trade.amount);
       }
     }
 
     // Reset form
-    setSelectedTrade('');
+    setSelectedTradeId('');
+    setTradeAmount('');
+    setCloseAmount('');
     setTokenName('');
-    setAmount('');
-    setIsClosingTrade(false);
-    setOpenDate(new Date().toISOString().split('T')[0]);
-    setCloseDate(new Date().toISOString().split('T')[0]);
   };
 
+  const selectedTrade = selectedTradeId ? openTrades.find(t => t.id === selectedTradeId) : null;
+
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
       <div className="relative">
         <select
-          value={selectedTrade}
+          value={selectedTradeId === '' ? 'new' : selectedTradeId.toString()}
           onChange={(e) => handleTradeSelection(e.target.value)}
           className="w-full p-2 border rounded"
           required
         >
-          <option value="">Select Trade</option>
-          <option value="New Entry">New Entry</option>
+          <option value="new">New Entry</option>
           {openTrades.map(trade => (
-            <option key={trade.id} value={trade.tokenName}>
+            <option key={trade.id} value={trade.id.toString()}>
               {trade.tokenName} (Opened: {new Date(trade.purchaseDate).toLocaleDateString()})
             </option>
           ))}
         </select>
       </div>
 
-      {selectedTrade === 'New Entry' ? (
+      {selectedTradeId === '' ? (
         <>
           <input
             type="text"
@@ -95,91 +80,67 @@ export const TradeForm: React.FC<TradeFormProps> = ({
             <span className="absolute left-3 top-2">$</span>
             <input
               type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              value={tradeAmount}
+              onChange={(e) => setTradeAmount(e.target.value)}
               placeholder="Purchase Amount"
               className="w-full p-2 pl-6 border rounded"
               required
               step="0.01"
             />
           </div>
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Open Position Date
-            </label>
-            <input
-              type="date"
-              value={openDate}
-              onChange={(e) => setOpenDate(e.target.value)}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
         </>
-      ) : isClosingTrade && selectedTrade ? (
+      ) : selectedTrade ? (
         <div className="space-y-4">
           <div className="p-4 bg-gray-50 rounded">
-            <p className="font-medium">Closing Trade: {selectedTrade}</p>
+            <p className="font-medium">Closing Trade: {selectedTrade.tokenName}</p>
             <p className="text-sm text-gray-600">
-              Initial Purchase: ${openTrades.find(t => t.tokenName === selectedTrade)?.purchaseAmount.toFixed(2)}
-            </p>
-            <p className="text-sm text-gray-600">
-              Open Date: {new Date(openDate).toLocaleDateString()}
+              Initial Purchase: ${selectedTrade.amount.toFixed(2)}
             </p>
           </div>
           <div className="relative">
             <span className="absolute left-3 top-2">$</span>
             <input
               type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              value={closeAmount}
+              onChange={(e) => setCloseAmount(e.target.value)}
               placeholder="Selling Amount"
               className="w-full p-2 pl-6 border rounded"
               required
               step="0.01"
             />
           </div>
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Close Position Date
-            </label>
-            <input
-              type="date"
-              value={closeDate}
-              onChange={(e) => setCloseDate(e.target.value)}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
-          {amount && (
+          {closeAmount && (
             <div className="p-4 rounded bg-gray-50">
               <p className={`font-medium ${
-                parseFloat(amount) > (openTrades.find(t => t.tokenName === selectedTrade)?.purchaseAmount || 0)
+                Number(closeAmount) > selectedTrade.amount
                   ? 'text-green-600'
                   : 'text-red-600'
               }`}>
                 Projected P/L: $
-                {(parseFloat(amount) - (openTrades.find(t => t.tokenName === selectedTrade)?.purchaseAmount || 0)).toFixed(2)}
+                {(parseFloat(closeAmount) - selectedTrade.amount).toFixed(2)}
               </p>
               <p className="text-sm text-gray-600 mt-1">
-                Days Held: {calculateDaysHeld(openDate, closeDate)}
+                Days Held: {calculateDaysHeld(selectedTrade.purchaseDate)}
               </p>
             </div>
           )}
         </div>
       ) : null}
 
-      {(selectedTrade === 'New Entry' || isClosingTrade) && amount && (
-        <button
-          type="button"
-          onClick={handleSubmit}
-          className={`px-4 py-2 rounded text-white ${
-            isClosingTrade ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'
-          }`}
-        >
-          {isClosingTrade ? 'Close Trade' : 'Open New Trade'}
-        </button>
-      )}
-    </div>
+      <button
+        type="submit"
+        className={`px-4 py-2 rounded text-white ${
+          selectedTradeId === '' 
+            ? 'bg-blue-500 hover:bg-blue-600' 
+            : 'bg-red-500 hover:bg-red-600'
+        }`}
+        disabled={
+          (selectedTradeId === '' && (!tokenName || !tradeAmount)) ||
+          (selectedTradeId !== '' && !closeAmount)
+        }
+      >
+        {selectedTradeId === '' ? 'Open New Trade' : 'Close Trade'}
+      </button>
+    </form>
   );
-};
+}

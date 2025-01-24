@@ -1,38 +1,16 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { Trade, Entry, TransactionType, ExpenseDetails, ClaimDetails } from '../types';
+import { Trade, Entry, TransactionType, ExpenseDetails } from '@/types';
 import { ExpenseForm } from '@/components/ExpenseForm';
-import { ClaimForm } from '@/components/ClaimForm';
 import { TradeForm } from '@/components/TradeForm';
 import { PaginatedTable } from '@/components/PaginatedTable';
 import { TaxSummary } from '@/components/TaxSummary';
+import { ExpenseCategoryChart } from '@/components/ExpenseCategoryChart';
+import { CategoryManager } from '@/components/CategoryManager';
 
-const TYPES: TransactionType[] = ['Expense', 'Held for Taxes', 'Trades', 'Income', 'Claims'];
-const COLORS: string[] = ['#FF8042', '#FFBB28', '#00C49F', '#0088FE', '#8884d8'];
-
-// If using API routes for data persistence
-const saveToDatabase = async (newEntries: Entry[], newTrades: Trade[]) => {
-  try {
-    const response = await fetch('/api/entries', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        entries: newEntries,
-        trades: newTrades,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to save data');
-    }
-  } catch (error) {
-    console.error('Error saving data:', error);
-  }
-};
-
+const TYPES: TransactionType[] = ['Expense', 'Trades', 'Income'];
+const COLORS: string[] = ['#FF8042', '#00C49F', '#0088FE'];
 
 const Dashboard: React.FC = () => {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -41,25 +19,16 @@ const Dashboard: React.FC = () => {
   const [amount, setAmount] = useState<string>('');
   const [txn, setTxn] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '' });
-  const [claimDetails, setClaimDetails] = useState<ClaimDetails>({
-    totalAmount: 0,
-    tokenTags: [],  // This will be Token[]
-    heldForTaxes: false,
-    taxPercentage: undefined,
-    taxAmount: undefined
-  });
+  const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '', vendor: '' });
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const response = await fetch('/api/entries');
-        if (!response.ok) {
-          throw new Error('Failed to load data');
-        }
+        if (!response.ok) throw new Error('Failed to load data');
         const data = await response.json();
-        setEntries(data.entries || []);
-        setOpenTrades(data.trades || []);
+        setEntries(data);
       } catch (error) {
         console.error('Error loading data:', error);
       }
@@ -71,127 +40,100 @@ const Dashboard: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (selectedType === 'Claims') {
-      // Create the main claim entry
-      const newEntry: Entry = {
-        id: Date.now(),
-        type: 'Claims',
-        amount: parseFloat(amount),
-        date,
-        claimDetails,
-        purchaseAmount: 0,
-        purchaseDate: '',
-        status: 'open'
-      };
+    if (!selectedType || !amount) return;
 
-      // If holding for taxes, create a separate entry
-      const entries = [newEntry];
-      if (claimDetails.heldForTaxes && claimDetails.taxAmount) {
-        const taxEntry: Entry = {
-          id: Date.now() + 1,
-          type: 'Claims',
-          amount: claimDetails.taxAmount,
-          date,
-          claimDetails: {
-            ...claimDetails,
-            totalAmount: claimDetails.taxAmount,
-            heldForTaxes: true
-          },
-          purchaseAmount: 0,
-          purchaseDate: '',
+    const entryData = {
+      type: selectedType,
+      amount: parseFloat(amount),
+      date: new Date(date).toISOString(),
+      txn: txn || null,
+      expenseDetails: selectedType === 'Expense' ? expenseDetails : null,
+      purchaseAmount: 0,
+      purchaseDate: new Date().toISOString(),
+      status: 'open'
+    };
+
+    try {
+      const response = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: [entryData] }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save entry');
+
+      // Refresh entries after successful save
+      const entriesResponse = await fetch('/api/entries');
+      if (entriesResponse.ok) {
+        const data = await entriesResponse.json();
+        setEntries(data);
+      }
+
+      // Reset form
+      setSelectedType('');
+      setAmount('');
+      setTxn('');
+      setExpenseDetails({ description: '', vendor: '' });
+    } catch (error) {
+      console.error('Error saving entry:', error);
+    }
+  };
+
+  const handleEdit = (entry: Entry) => {
+    setEditingEntry(entry);
+    setSelectedType(entry.type);
+    setAmount(entry.amount.toString());
+    setDate(entry.date);
+    if (entry.txn) setTxn(entry.txn);
+    if (entry.expenseDetails) setExpenseDetails(entry.expenseDetails);
+  };
+
+  const handleNewTrade = async (tokenName: string, amount: number) => {
+    try {
+      const response = await fetch('/api/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tokenName,
+          amount,
+          purchaseDate: new Date().toISOString(),
           status: 'open'
-        };
-        entries.push(taxEntry);
-      }
+        }),
+      });
 
-      setEntries(prev => [...prev, ...entries]);
-      await saveToDatabase([...entries, ...entries], openTrades);
-    } else {
-      const newEntry: Entry = {
-        id: Date.now(),
-        type: selectedType as TransactionType,
-        amount: parseFloat(amount),
-        date,
-        txn: selectedType !== 'Income' ? txn : undefined,
-        purchaseAmount: 0,
-        purchaseDate: '',
-        status: 'open'
-      };
+      if (!response.ok) throw new Error('Failed to create trade');
+      const newTrade = await response.json();
+      setOpenTrades(prev => [...prev, newTrade]);
+    } catch (error) {
+      console.error('Error creating trade:', error);
+    }
+  };
 
-      if (selectedType === 'Expense') {
-        newEntry.expenseDetails = expenseDetails;
-      }
-
-      setEntries(prev => [...prev, newEntry]);
-      await saveToDatabase([...entries, newEntry], openTrades);
+  const handleCloseTrade = async (tradeId: number, closeAmount: number, originalAmount: number) => {
+    const profit = closeAmount - originalAmount;
+    
+    if (profit > 0) {
+      const taxAmount = profit * 0.30;
+      alert(`Remember to set aside $${taxAmount.toFixed(2)} (30% of $${profit.toFixed(2)} profit) for taxes.`);
     }
 
-    // Reset form
-    setSelectedType('');
-    setAmount('');
-    setTxn('');
-    setExpenseDetails({ description: '' });
-    setClaimDetails({
-      totalAmount: 0,
-      tokenTags: [],
-      heldForTaxes: false
-    });
-  };
+    try {
+      const response = await fetch(`/api/trades/${tradeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          closeAmount,
+          closeDate: new Date().toISOString(),
+          status: 'closed'
+        }),
+      });
 
-  const getPieData = () => {
-    const data = TYPES.map(type => ({
-      name: type,
-      value: entries
-        .filter(entry => entry.type === type)
-        .reduce((sum, entry) => {
-          // For trades, use PnL value if it exists
-          if (entry.type === 'Trades' && entry.pnl !== undefined) {
-            return sum + entry.pnl;
-          }
-          return sum + entry.amount;
-        }, 0)
-    }));
-    return data.filter(item => item.value !== 0);
-  };
-  const handleNewTrade = (tokenName: string, amount: number) => {
-    const newTrade: Trade = {
-      id: Date.now(),
-      tokenName,
-      purchaseAmount: amount,
-      purchaseDate: date,
-      status: 'open'
-    };
-
-    setOpenTrades(prev => [...prev, newTrade]);
-    saveToDatabase(entries, [...openTrades, newTrade]);
-    
-    // Reset form
-    setSelectedType('');
-    setAmount('');
-  };
-
-  const handleCloseTrade = (trade: Trade, closeAmount: number) => {
-    const updatedTrades = openTrades.filter(t => t.id !== trade.id);
-    
-    const closedTrade: Entry = {
-      id: Date.now(),
-      type: 'Trades',
-      amount: closeAmount,
-      date,
-      tokenName: trade.tokenName,
-      pnl: closeAmount - trade.purchaseAmount,
-      purchaseAmount: 0,
-      purchaseDate: '',
-      status: 'open'
-    };
-
-    setOpenTrades(updatedTrades);
-    setEntries(prev => [...prev, closedTrade]);
-    saveToDatabase([...entries, closedTrade], updatedTrades);
-    
-    // Reset form
-    setSelectedType('');
-    setAmount('');
+      if (!response.ok) throw new Error('Failed to close trade');
+      
+      setOpenTrades(prev => prev.filter(t => t.id !== tradeId));
+    } catch (error) {
+      console.error('Error closing trade:', error);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -200,16 +142,35 @@ const Dashboard: React.FC = () => {
         method: 'DELETE',
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to delete entry');
-      }
-
-      // Update local state after successful deletion
-      setEntries(prevEntries => prevEntries.filter(entry => entry.id !== id));
+      if (!response.ok) throw new Error('Failed to delete entry');
+      
+      // Remove entry from state
+      setEntries(prev => prev.filter(entry => entry.id !== id));
     } catch (error) {
       console.error('Error deleting entry:', error);
     }
   };
+
+  const calculateNetIncome = useMemo(() => {
+    const totalIncome = entries
+      .filter(entry => entry.type === 'Income' || entry.type === 'Claims')
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    const totalExpenses = entries
+      .filter(entry => entry.type === 'Expense')
+      .reduce((sum, entry) => sum + entry.amount, 0);
+
+    return totalIncome - totalExpenses;
+  }, [entries]);
+
+  const getPieData = useMemo(() => {
+    return TYPES.map(type => ({
+      name: type,
+      value: entries
+        .filter(entry => entry.type === type)
+        .reduce((sum, entry) => sum + entry.amount, 0)
+    })).filter(item => item.value !== 0);
+  }, [entries]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -255,6 +216,30 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Net Income Card */}
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  {/* Icon for net income - you can use any icon you prefer */}
+                  <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Net Income
+                    </dt>
+                    <dd className={`text-lg font-medium ${calculateNetIncome >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      ${calculateNetIncome.toFixed(2)}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Tax Summary */}
           <TaxSummary entries={entries} />
 
@@ -265,15 +250,15 @@ const Dashboard: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={getPieData()}
+                    data={getPieData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
                     cy="50%"
                     outerRadius={120}
-                    label
+                    label={(entry) => `${entry.name}: $${Math.abs(Number(entry.value)).toFixed(2)}`}
                   >
-                    {getPieData().map((entry, index) => (
+                    {getPieData.map((entry: { name: string; value: number }, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -283,9 +268,25 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Expense Categories Chart */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-xl font-bold mb-4">Expense Categories</h2>
+            <div className="h-96">
+              <ExpenseCategoryChart entries={entries} />
+            </div>
+          </div>
+
+          {/* Category Management */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-xl font-bold mb-4">Manage Categories</h2>
+            <CategoryManager />
+          </div>
+
           {/* New Entry Form */}
           <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">Add New Entry</h2>
+            <h2 className="text-xl font-bold mb-4">
+              {editingEntry ? 'Edit Entry' : 'Add New Entry'}
+            </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Type Selection */}
               <div>
@@ -318,16 +319,8 @@ const Dashboard: React.FC = () => {
                 />
               )}
 
-              {selectedType === 'Claims' && (
-                <ClaimForm
-                  details={claimDetails}
-                  onChange={setClaimDetails}
-                  onAmountChange={(totalValue) => setAmount(totalValue.toString())}
-                />
-              )}
-
               {/* Common Fields */}
-              {selectedType && selectedType !== 'Trades' && selectedType !== 'Claims' && (
+              {selectedType && selectedType !== 'Trades' && (
                 <>
                   <div className="relative">
                     <span className="absolute left-3 top-2">$</span>
@@ -341,28 +334,53 @@ const Dashboard: React.FC = () => {
                       step="0.01"
                     />
                   </div>
+                  
+                  <div>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full p-2 border rounded"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <input
+                      type="url"
+                      value={txn}
+                      onChange={(e) => setTxn(e.target.value)}
+                      placeholder="Transaction URL (optional)"
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
                 </>
               )}
 
-              {selectedType && selectedType !== 'Trades' && (
-                <div>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-2 border rounded"
-                    required
-                  />
-                </div>
-              )}
-
               {selectedType && (
-                <button
-                  type="submit"
-                  className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Add Entry
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    {editingEntry ? 'Update Entry' : 'Add Entry'}
+                  </button>
+                  {editingEntry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEntry(null);
+                        setSelectedType('');
+                        setAmount('');
+                        setTxn('');
+                        setExpenseDetails({ description: '', vendor: '' });
+                      }}
+                      className="py-2 px-4 bg-gray-500 text-white rounded hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               )}
             </form>
           </div>
@@ -370,7 +388,11 @@ const Dashboard: React.FC = () => {
           {/* Entries Table */}
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-bold mb-4">Recent Entries</h2>
-            <PaginatedTable entries={entries.slice().reverse()} onDelete={handleDelete}/>
+            <PaginatedTable 
+              entries={entries.slice().reverse()} 
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
           </div>
         </div>
       </main>
