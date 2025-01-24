@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "migrate:build": "tsc scripts/migrate-data.ts --outDir dist --esModuleInterop true",
     "migrate:run": "node dist/migrate-data.js",
-    "migrate": "npm run migrate:build && npm run migrate:run"
+    "migrate": "npm run migrate:build && npm run migrate:run",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
