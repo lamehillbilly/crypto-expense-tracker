@@ -8,6 +8,9 @@ import { PaginatedTable } from '@/components/PaginatedTable';
 import { TaxSummary } from '@/components/TaxSummary';
 import { ExpenseCategoryChart } from '@/components/ExpenseCategoryChart';
 import { CategoryManager } from '@/components/CategoryManager';
+import { DistributionOverview } from '@/components/DistributionOverview';
+import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 
 const TYPES: TransactionType[] = ['Expense', 'Trades', 'Income'];
 const COLORS: string[] = ['#FF8042', '#00C49F', '#0088FE'];
@@ -21,6 +24,8 @@ const Dashboard: React.FC = () => {
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ description: '', vendor: '' });
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [showCharts, setShowCharts] = useState(true);
+  const [showNewEntry, setShowNewEntry] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -40,17 +45,17 @@ const Dashboard: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!selectedType || !amount) return;
+    if (!selectedType || !amount) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
 
     const entryData = {
       type: selectedType,
       amount: parseFloat(amount),
-      date: new Date(date).toISOString(),
+      date,
       txn: txn || null,
       expenseDetails: selectedType === 'Expense' ? expenseDetails : null,
-      purchaseAmount: 0,
-      purchaseDate: new Date().toISOString(),
-      status: 'open'
     };
 
     try {
@@ -62,20 +67,19 @@ const Dashboard: React.FC = () => {
 
       if (!response.ok) throw new Error('Failed to save entry');
 
-      // Refresh entries after successful save
-      const entriesResponse = await fetch('/api/entries');
-      if (entriesResponse.ok) {
-        const data = await entriesResponse.json();
-        setEntries(data);
-      }
-
+      const updatedEntries = await fetch('/api/entries').then(res => res.json());
+      setEntries(updatedEntries);
+      
       // Reset form
       setSelectedType('');
       setAmount('');
       setTxn('');
       setExpenseDetails({ description: '', vendor: '' });
+      setShowNewEntry(false);
+      toast.success('Entry added successfully');
     } catch (error) {
       console.error('Error saving entry:', error);
+      toast.error('Failed to save entry');
     }
   };
 
@@ -151,166 +155,109 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const calculateNetIncome = useMemo(() => {
+  const stats = useMemo(() => {
     const totalIncome = entries
-      .filter(entry => entry.type === 'Income' || entry.type === 'Claims')
+      .filter(entry => entry.type === 'Income')
       .reduce((sum, entry) => sum + entry.amount, 0);
 
     const totalExpenses = entries
       .filter(entry => entry.type === 'Expense')
       .reduce((sum, entry) => sum + entry.amount, 0);
 
-    return totalIncome - totalExpenses;
-  }, [entries]);
+    const totalClaims = entries
+      .filter(entry => entry.type === 'Claims')
+      .reduce((sum, entry) => sum + entry.amount, 0);
 
-  const getPieData = useMemo(() => {
-    return TYPES.map(type => ({
-      name: type,
-      value: entries
-        .filter(entry => entry.type === type)
-        .reduce((sum, entry) => sum + entry.amount, 0)
-    })).filter(item => item.value !== 0);
+    const totalTrades = entries
+      .filter(entry => entry.type === 'Trades')
+      .reduce((sum, entry) => sum + (entry.pnl || 0), 0);
+
+    return { totalIncome, totalExpenses, totalClaims, totalTrades };
   }, [entries]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Crypto Expense Tracker
-          </h1>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-900">Total Claims</h3>
-              <p className="mt-2 text-3xl font-bold text-blue-600">
-                ${entries.reduce((sum, entry) => 
-                  entry.type === 'Claims' ? sum + entry.amount : sum, 0
-                ).toFixed(2)}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-900">Total Expenses</h3>
-              <p className="mt-2 text-3xl font-bold text-red-600">
-                ${entries.reduce((sum, entry) => 
-                  entry.type === 'Expense' ? sum + entry.amount : sum, 0
-                ).toFixed(2)}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-900">Net Trading P/L</h3>
-              <p className="mt-2 text-3xl font-bold" 
-                 style={{ color: entries.reduce((sum, entry) => 
-                   entry.type === 'Trades' && entry.pnl ? sum + entry.pnl : sum, 0) >= 0 
-                   ? '#16a34a' : '#dc2626' }}>
-                ${entries.reduce((sum, entry) => 
-                  entry.type === 'Trades' && entry.pnl ? sum + entry.pnl : sum, 0
-                ).toFixed(2)}
-              </p>
-            </div>
+    <div className="container mx-auto p-4 space-y-6">
+      {/* New Entry Section */}
+      <div className="bg-card rounded-lg">
+        <button
+          onClick={() => setShowNewEntry(!showNewEntry)}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            <h2 className="text-lg font-semibold">New Entry</h2>
           </div>
+          {showNewEntry ? (
+            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+          )}
+        </button>
 
-          {/* Net Income Card */}
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  {/* Icon for net income - you can use any icon you prefer */}
-                  <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Net Income
-                    </dt>
-                    <dd className={`text-lg font-medium ${calculateNetIncome >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      ${calculateNetIncome.toFixed(2)}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tax Summary */}
-          <TaxSummary entries={entries} />
-
-          {/* Charts Section */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">Distribution Overview</h2>
-            <div className="h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={getPieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={120}
-                    label={(entry) => `${entry.name}: $${Math.abs(Number(entry.value)).toFixed(2)}`}
-                  >
-                    {getPieData.map((entry: { name: string; value: number }, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => `$${Math.abs(Number(value)).toFixed(2)}`} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Expense Categories Chart */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">Expense Categories</h2>
-            <div className="h-96">
-              <ExpenseCategoryChart entries={entries} />
-            </div>
-          </div>
-
-          {/* Category Management */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">Manage Categories</h2>
-            <CategoryManager />
-          </div>
-
-          {/* New Entry Form */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">
-              {editingEntry ? 'Edit Entry' : 'Add New Entry'}
-            </h2>
+        {showNewEntry && (
+          <div className="p-4 pt-0">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Type Selection */}
-              <div>
-                <select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value as TransactionType)}
-                  className="w-full p-2 border rounded"
-                  required
-                >
-                  <option value="">Select Type</option>
-                  {TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
+                    Type
+                  </label>
+                  <select
+                    value={selectedType}
+                    onChange={(e) => setSelectedType(e.target.value as TransactionType)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    required
+                  >
+                    <option value="">Select type</option>
+                    {TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Conditional Forms */}
-              {selectedType === 'Trades' && (
-                <TradeForm
-                  openTrades={openTrades}
-                  onNewTrade={handleNewTrade}
-                  onCloseTrade={handleCloseTrade}
-                />
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
+                    Amount
+                  </label>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    placeholder="0.00"
+                    step="0.01"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
+                    Transaction ID
+                  </label>
+                  <input
+                    type="text"
+                    value={txn}
+                    onChange={(e) => setTxn(e.target.value)}
+                    className="w-full p-2 rounded-md border bg-background text-foreground"
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
 
               {selectedType === 'Expense' && (
                 <ExpenseForm
@@ -319,83 +266,91 @@ const Dashboard: React.FC = () => {
                 />
               )}
 
-              {/* Common Fields */}
-              {selectedType && selectedType !== 'Trades' && (
-                <>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2">$</span>
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="Amount"
-                      className="w-full p-2 pl-6 border rounded"
-                      required
-                      step="0.01"
-                    />
-                  </div>
-                  
-                  <div>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="w-full p-2 border rounded"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <input
-                      type="url"
-                      value={txn}
-                      onChange={(e) => setTxn(e.target.value)}
-                      placeholder="Transaction URL (optional)"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                </>
-              )}
-
-              {selectedType && (
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    {editingEntry ? 'Update Entry' : 'Add Entry'}
-                  </button>
-                  {editingEntry && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingEntry(null);
-                        setSelectedType('');
-                        setAmount('');
-                        setTxn('');
-                        setExpenseDetails({ description: '', vendor: '' });
-                      }}
-                      className="py-2 px-4 bg-gray-500 text-white rounded hover:bg-gray-600"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              )}
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  Save Entry
+                </button>
+              </div>
             </form>
           </div>
+        )}
+      </div>
 
-          {/* Entries Table */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold mb-4">Recent Entries</h2>
-            <PaginatedTable 
-              entries={entries.slice().reverse()} 
-              onDelete={handleDelete}
-              onEdit={handleEdit}
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-card rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">Total Income</h3>
+            <DollarSign className="h-4 w-4 text-primary" />
+          </div>
+          <p className="text-2xl font-bold">${stats.totalIncome.toFixed(2)}</p>
+        </div>
+        
+        <div className="bg-card rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">Total Expenses</h3>
+            <Receipt className="h-4 w-4 text-destructive" />
+          </div>
+          <p className="text-2xl font-bold">${stats.totalExpenses.toFixed(2)}</p>
+        </div>
+        
+        <div className="bg-card rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">Total Claims</h3>
+            <PiggyBank className="h-4 w-4 text-primary" />
+          </div>
+          <p className="text-2xl font-bold">${stats.totalClaims.toFixed(2)}</p>
+        </div>
+        
+        <div className="bg-card rounded-lg p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-muted-foreground">Trading P/L</h3>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </div>
+          <p className="text-2xl font-bold">${stats.totalTrades.toFixed(2)}</p>
+        </div>
+      </div>
+
+      {/* Analytics Section */}
+      <div className="bg-card rounded-lg">
+        <button
+          onClick={() => setShowCharts(!showCharts)}
+          className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+        >
+          <h2 className="text-lg font-semibold">Analytics Overview</h2>
+          {showCharts ? (
+            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+          )}
+        </button>
+
+        {showCharts && (
+          <div className="p-4 pt-0 grid gap-6 md:grid-cols-2">
+            <ExpenseCategoryChart entries={entries} />
+            <DistributionOverview
+              data={[
+                { name: 'Income', value: stats.totalIncome, color: '--chart-2' },
+                { name: 'Expenses', value: stats.totalExpenses, color: '--chart-1' },
+                { name: 'Claims', value: stats.totalClaims, color: '--chart-3' },
+                { name: 'Trades', value: stats.totalTrades, color: '--chart-4' }
+              ]}
             />
           </div>
-        </div>
-      </main>
+        )}
+      </div>
+
+      {/* Table Section */}
+      <div className="bg-card rounded-lg p-4">
+        <PaginatedTable 
+          entries={entries} 
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+        />
+      </div>
     </div>
   );
 }
