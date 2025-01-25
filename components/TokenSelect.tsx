@@ -50,7 +50,7 @@ export function TokenSelect({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         onFocus={() => setIsOpen(true)}
-        className="w-full p-2 border rounded"
+        className="w-full p-2 border rounded bg-muted/50"
         placeholder={placeholder}
       />
       

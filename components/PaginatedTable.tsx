@@ -1,9 +1,26 @@
 // components/PaginatedTable.tsx
 'use client';
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Entry, ExpenseDetails, TradeDetails, TransactionType } from '@/types';
-import { ChevronLeft, ChevronRight, ExternalLink, Pencil, Trash2, Calendar, X } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  ExternalLink, 
+  Pencil, 
+  Trash2, 
+  Calendar, 
+  X, 
+  ArrowUpRight, 
+  ArrowDownRight,
+  Search,
+  Filter
+} from 'lucide-react';
 import { format } from 'date-fns';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface PaginatedTableProps {
   entries: Entry[];
@@ -16,9 +33,36 @@ interface Filters {
   type?: TransactionType;
   dateFrom?: string;
   dateTo?: string;
+  searchFields: {
+    description: boolean;
+    tokenSymbol: boolean;
+    txn: boolean;
+  };
 }
 
 type SortableFields = 'date' | 'type' | 'amount' | 'category';
+
+const formatPnL = (pnl: number | undefined) => {
+  if (pnl === undefined) return '-';
+  return (
+    <span className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+      ${Math.abs(pnl).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}
+      {pnl >= 0 ? (
+        <ArrowUpRight className="inline h-4 w-4 ml-1" />
+      ) : (
+        <ArrowDownRight className="inline h-4 w-4 ml-1" />
+      )}
+    </span>
+  );
+};
+
+const formatDateForInput = (date: string | undefined) => {
+  if (!date) return '';
+  return new Date(date).toISOString().split('T')[0];
+};
 
 export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,7 +70,12 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
   const [filters, setFilters] = useState<Filters>({
     search: '',
     dateFrom: '',
-    dateTo: ''
+    dateTo: '',
+    searchFields: {
+      description: true,
+      tokenSymbol: true,
+      txn: true
+    }
   });
   const [sortField, setSortField] = useState<SortableFields>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -48,27 +97,37 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
   const filteredEntries = useMemo(() => {
     let result = [...entries];
 
-    // Text search
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      result = result.filter(entry => {
-        const description = entry.expenseDetails?.description?.toLowerCase() || '';
-        const txn = entry.txn?.toLowerCase() || '';
-        const tokenName = entry.type === 'Trades' 
-          ? (entry.tradeDetails as TradeDetails)?.tokenName?.toLowerCase() || ''
-          : '';
-        const category = entry.expenseDetails?.category?.toLowerCase() || '';
-
-        return description.includes(searchLower) || 
-               txn.includes(searchLower) || 
-               tokenName.includes(searchLower) ||
-               category.includes(searchLower);
-      });
-    }
-
     // Type filter
     if (filters.type) {
       result = result.filter(entry => entry.type === filters.type);
+    }
+
+    // Enhanced text search
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter(entry => {
+        const matches = [];
+        
+        if (filters.searchFields.description) {
+          matches.push(
+            entry.expenseDetails?.description?.toLowerCase().includes(searchLower) || false
+          );
+        }
+        
+        if (filters.searchFields.tokenSymbol) {
+          matches.push(
+            entry.tokenSymbol?.toLowerCase().includes(searchLower) || false
+          );
+        }
+        
+        if (filters.searchFields.txn) {
+          matches.push(
+            entry.txn?.toLowerCase().includes(searchLower) || false
+          );
+        }
+
+        return matches.some(match => match);
+      });
     }
 
     // Date range filter
@@ -78,7 +137,7 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
     }
     if (filters.dateTo) {
       const toDate = new Date(filters.dateTo);
-      toDate.setHours(23, 59, 59, 999); // Include the entire day
+      toDate.setHours(23, 59, 59, 999);
       result = result.filter(entry => new Date(entry.date) <= toDate);
     }
 
@@ -112,194 +171,238 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
   }, [currentPage, itemsPerPage, sortedEntries]);
 
   const totalPages = Math.ceil(sortedEntries.length / itemsPerPage);
-
   return (
-    <div className="space-y-4 bg-secondary p-4 rounded-lg">
-      {/* Filters Section */}
-      <div className="space-y-4">
-        {/* Search and Type Filter Row */}
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-md bg-background text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <select
-            value={filters.type || ''}
-            onChange={(e) => setFilters(prev => ({ 
-              ...prev, 
-              type: e.target.value as TransactionType || undefined 
-            }))}
-            className="px-3 py-2 border rounded-md bg-background text-foreground"
-          >
-            <option value="">All Types</option>
-            <option value="Expense">Expense</option>
-            <option value="Income">Income</option>
-            <option value="Trades">Trades</option>
-            <option value="Claims">Claims</option>
-          </select>
-        </div>
-
-        {/* Date Range Filter Row */}
-        <div className="flex flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={filters.dateFrom || ''}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-              className="px-3 py-2 border rounded-md bg-background text-foreground"
-            />
-            <span className="text-muted-foreground">to</span>
-            <input
-              type="date"
-              value={filters.dateTo || ''}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-              className="px-3 py-2 border rounded-md bg-background text-foreground"
-            />
-          </div>
-          
-          {/* Clear Filters Button */}
-          {(filters.search || filters.type || filters.dateFrom || filters.dateTo) && (
-            <button
-              onClick={() => setFilters({ search: '' })}
-              className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-
-        {/* Active Filters Display */}
-        <div className="flex flex-wrap gap-2">
-          {filters.type && (
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">
-              {filters.type}
-              <button
-                onClick={() => setFilters(prev => ({ ...prev, type: undefined }))}
-                className="hover:text-primary/80"
-              >
-                <X className="h-3 w-3" />
-              </button>
+    <Card className="overflow-hidden border-0 shadow-md">
+      <div className="space-y-4 p-6">
+        {/* Search and Filters Section */}
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[1fr,auto]">
+            {/* Search Section */}
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search transactions..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="flex flex-wrap gap-3 text-sm">
+                {['description', 'tokenSymbol', 'txn'].map((field) => (
+                  <label key={field} className="flex items-center gap-2 px-3 py-1.5 bg-secondary rounded-lg cursor-pointer hover:bg-secondary/80 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={filters.searchFields[field as keyof typeof filters.searchFields]}
+                      onChange={(e) => setFilters(prev => ({
+                        ...prev,
+                        searchFields: {
+                          ...prev.searchFields,
+                          [field]: e.target.checked
+                        }
+                      }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="capitalize">{field.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  </label>
+                ))}
+              </div>
             </div>
-          )}
-          {filters.dateFrom && filters.dateTo && (
-            <div className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-md text-sm">
-              {format(new Date(filters.dateFrom), 'MMM d, yyyy')} - {format(new Date(filters.dateTo), 'MMM d, yyyy')}
-              <button
-                onClick={() => setFilters(prev => ({ ...prev, dateFrom: '', dateTo: '' }))}
-                className="hover:text-primary/80"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-muted">
-            <tr>
-              {['Date', 'Type', 'Amount', 'Category'].map((header) => (
-                <th
-                  key={header.toLowerCase()}
-                  onClick={() => handleSort(header.toLowerCase() as SortableFields)}
-                  className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/80"
+            {/* Type Filter */}
+            <div className="flex items-start">
+              <select
+                value={filters.type || ''}
+                onChange={(e) => setFilters(prev => ({ 
+                  ...prev, 
+                  type: e.target.value as TransactionType || undefined 
+                }))}
+                className="px-4 py-2 border rounded-lg bg-background text-foreground min-w-[150px] focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="">All Types</option>
+                <option value="Income">Income</option>
+                <option value="Expense">Expense</option>
+                <option value="Claims">Claims</option>
+                <option value="Trade">Trades</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Date Range Section */}
+          <div className="flex flex-wrap items-center gap-4 bg-secondary/50 p-4 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={formatDateForInput(filters.dateFrom)}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                  className="px-3 py-1.5 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                <span className="text-muted-foreground">to</span>
+                <input
+                  type="date"
+                  value={formatDateForInput(filters.dateTo)}
+                  onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                  className="px-3 py-1.5 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+            </div>
+
+            {(filters.search || filters.type || filters.dateFrom || filters.dateTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFilters({
+                  search: '',
+                  dateFrom: '',
+                  dateTo: '',
+                  searchFields: {
+                    description: true,
+                    tokenSymbol: true,
+                    txn: true
+                  }
+                })}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear filters
+              </Button>
+            )}
+          </div>
+
+          {/* Active Filters Display */}
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(filters).map(([key, value]) => {
+              if (!value || key === 'searchFields') return null;
+              return (
+                <Badge 
+                  key={key} 
+                  variant="secondary"
+                  className="py-1.5 pl-3 pr-2 gap-2"
                 >
-                  {header}
-                  {sortField === header.toLowerCase() && (
-                    <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </th>
-              ))}
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                TXN
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-card divide-y divide-border">
-            {currentEntries.map((entry) => (
-              <tr key={String(entry.id)} className="group hover:bg-muted/50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  {new Date(entry.date).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  {entry.type}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  ${entry.amount?.toFixed(2) || '0.00'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  {entry.type === 'Expense' ? entry.expenseDetails?.category || '-' : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  {entry.txn ? (
-                    <a
-                      href={entry.txn}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-primary hover:text-primary/80 hover:underline"
-                    >
-                      <span className="truncate max-w-[150px]">View</span>
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex items-center justify-end gap-2">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">
-                    <button
-                      onClick={() => onEdit(entry)}
-                      className="p-2 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
-                      aria-label="Edit entry"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(Number(entry.id))}
-                      className="p-2 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
-                      aria-label="Delete entry"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-4">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="px-4 py-2 border rounded-md disabled:opacity-50"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <span className="text-sm text-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="px-4 py-2 border rounded-md disabled:opacity-50"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+                  {key === 'dateFrom' ? `From ${format(new Date(value), 'MMM d, yyyy')}` :
+                   key === 'dateTo' ? `To ${format(new Date(value), 'MMM d, yyyy')}` :
+                   key === 'type' ? `Type: ${value}` :
+                   key === 'search' ? `Search: ${value}` : value}
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, [key]: '' }))}
+                    className="hover:bg-background/50 rounded"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* Table Section */}
+        <div className="relative rounded-lg border overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="font-semibold">Date</TableHead>
+                <TableHead className="font-semibold">Type</TableHead>
+                <TableHead className="font-semibold">Token/Description</TableHead>
+                <TableHead className="font-semibold">Amount/P&L</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentEntries.map((entry) => (
+                <TableRow key={entry.id} className="hover:bg-muted/50">
+                  <TableCell className="py-3">{format(new Date(entry.date), 'MMM dd, yyyy')}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{entry.type}</Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[300px] truncate">
+                    {entry.type === 'Trade' ? (
+                      <span className="font-medium">{entry.tokenSymbol}</span>
+                    ) : (
+                      entry.expenseDetails?.description
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {entry.type === 'Trade' ? (
+                      formatPnL(entry.pnl)
+                    ) : (
+                      <span className="font-medium">${entry.amount.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {entry.type === 'Trade' ? (
+                      <Badge variant={entry.status === 'open' ? 'success' : 'secondary'}>
+                        {entry.status}
+                      </Badge>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEdit(entry)}
+                        className="h-8 w-8"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDelete(entry.id!)}
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Empty State */}
+        {currentEntries.length === 0 && (
+          <div className="py-12 text-center">
+            <p className="text-muted-foreground">No transactions found matching your filters.</p>
+          </div>
+        )}
+
+        {/* Pagination Section */}
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="gap-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="gap-2"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

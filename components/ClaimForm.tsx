@@ -1,10 +1,18 @@
 // components/ClaimForm.tsx
 'use client';
+
 import React, { useState } from 'react';
 import { ClaimDetails } from '@/types';
 import { TokenSelect } from './TokenSelect';
+import { DollarSign, Calculator, Coins } from 'lucide-react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 interface ClaimFormProps {
   details: ClaimDetails;
@@ -13,7 +21,7 @@ interface ClaimFormProps {
 }
 
 interface ExtendedClaimDetails extends ClaimDetails {
-  taxPercentage: number;  // Required tax percentage to match ClaimDetails
+  taxPercentage: number;
 }
 
 const TAX_RATES = [
@@ -38,14 +46,13 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
     const newDetails: ExtendedClaimDetails = {
       ...details,
       totalAmount: newAmount,
-      taxPercentage: Number(details.taxPercentage || 0) // Ensure taxPercentage is a number
+      taxPercentage: Number(details.taxPercentage || 0)
     };
-    // Recalculate tax amount if percentage-based
+    
     if (newDetails.heldForTaxes && newDetails.taxPercentage) {
       newDetails.taxAmount = (newAmount * newDetails.taxPercentage) / 100;
     }
     
-    // Convert ExtendedClaimDetails to ClaimDetails before passing
     const claimDetails: ClaimDetails = {
       ...details,
       totalAmount: newAmount,
@@ -72,7 +79,6 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
       return;
     }
 
-    // Calculate tax amount based on percentage
     const taxAmount = (details.totalAmount * (rate as number)) / 100;
     onChange({
       ...details,
@@ -95,94 +101,126 @@ export const ClaimForm: React.FC<ClaimFormProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      <TokenSelect
-        tokens={data || []} 
-        selectedTokens={data?.filter((token: { symbol: string; }) => 
-          details.tokenTags?.includes(token.symbol)
-        ) || []}
-        onTokensChange={(newToken) => {
-          onChange({ ...details, tokenTags: [...(details.tokenTags || []), newToken.symbol] })
-        }}
-      />
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div>
+          <Label className="text-sm font-medium">Select Tokens</Label>
+          <TokenSelect
+            tokens={data || []} 
+            selectedTokens={data?.filter((token: { symbol: string; }) => 
+              details.tokenTags?.includes(token.symbol)
+            ) || []}
+            onTokensChange={(newToken) => {
+              onChange({ ...details, tokenTags: [...(details.tokenTags || []), newToken.symbol] })
+            }}
+          />
+        </div>
 
-      <div className="relative">
-        <span className="absolute left-3 top-2">$</span>
-        <input
-          type="number"
-          value={details.totalAmount || ''}
-          onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
-          placeholder="Total Claim Amount"
-          className="w-full p-2 pl-6 border rounded"
-          required
-          step="0.01"
-        />
-      </div>
+        <div>
+          <Label className="text-sm font-medium">Claim Amount</Label>
+          <div className="relative mt-1.5">
+            <div className="absolute left-3 top-2.5">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <input
+              type="number"
+              value={details.totalAmount || ''}
+              onChange={(e) => handleAmountChange(parseFloat(e.target.value))}
+              placeholder="Enter total claim amount"
+              className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              required
+              step="0.01"
+            />
+          </div>
+        </div>
 
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          checked={details.heldForTaxes}
-          onChange={(e) => onChange({ ...details, heldForTaxes: e.target.checked })}
-          className="mr-2"
-        />
-        <label className="text-sm font-medium text-gray-700">
-          Hold for Taxes
-        </label>
-      </div>
+        <Separator className="my-6" />
 
-      {details.heldForTaxes && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {TAX_RATES.map(({ label, value }) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => handleTaxRateChange(value as number | "custom")}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  selectedRate === value
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-base">Tax Withholding</Label>
+              <p className="text-sm text-muted-foreground">
+                Set aside funds for tax obligations
+              </p>
+            </div>
+            <Switch
+              checked={details.heldForTaxes}
+              onCheckedChange={(checked) => onChange({ ...details, heldForTaxes: checked })}
+            />
           </div>
 
-          {selectedRate === 'custom' && (
-            <div className="relative">
-              <span className="absolute left-3 top-2">$</span>
-              <input
-                type="number"
-                value={customTaxAmount}
-                onChange={(e) => handleCustomTaxAmountChange(e.target.value)}
-                placeholder="Enter tax amount to hold"
-                className="w-full p-2 pl-6 border rounded"
-                min="0"
-                max={details.totalAmount}
-                step="0.01"
-              />
-            </div>
-          )}
+          {details.heldForTaxes && (
+            <Card className="p-4 space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {TAX_RATES.map(({ label, value }) => (
+                  <Button
+                    key={label}
+                    type="button"
+                    variant={selectedRate === value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleTaxRateChange(value as number | "custom")}
+                    className="rounded-full"
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
 
-          {details.taxAmount !== undefined && details.taxAmount > 0 && (
-            <div className="p-4 bg-gray-50 rounded">
-              <p className="text-sm text-gray-600">
-                Amount Held for Taxes: ${details.taxAmount.toFixed(2)}
-              </p>
-              <p className="text-sm text-gray-600">
-                Net Claim Amount: ${(details.totalAmount - details.taxAmount).toFixed(2)}
-              </p>
-              {details.taxPercentage && (
-                <p className="text-sm text-gray-600">
-                  Tax Rate: {details.taxPercentage}%
-                </p>
+              {selectedRate === 'custom' && (
+                <div className="relative">
+                  <div className="absolute left-3 top-2.5">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <input
+                    type="number"
+                    value={customTaxAmount}
+                    onChange={(e) => handleCustomTaxAmountChange(e.target.value)}
+                    placeholder="Enter custom tax amount"
+                    className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    min="0"
+                    max={details.totalAmount}
+                    step="0.01"
+                  />
+                </div>
               )}
-            </div>
+
+              {details.taxAmount !== undefined && details.taxAmount > 0 && (
+                <Card className="border border-muted p-4 bg-muted/50">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        Tax Amount
+                      </span>
+                      <Badge variant="secondary">
+                        ${details.taxAmount.toFixed(2)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Coins className="h-4 w-4" />
+                        Net Amount
+                      </span>
+                      <Badge variant="outline">
+                        ${(details.totalAmount - details.taxAmount).toFixed(2)}
+                      </Badge>
+                    </div>
+                    {details.taxPercentage && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Tax Rate</span>
+                        <Badge variant="secondary">
+                          {details.taxPercentage}%
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </Card>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

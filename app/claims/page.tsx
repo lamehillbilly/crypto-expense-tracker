@@ -1,6 +1,6 @@
 // app/claims/page.tsx
 'use client';
-
+import EnhancedClaimsStats from '@/components/StatsCards';
 import React, { useState, useEffect } from 'react';
 import { TokenSelect } from '@/components/TokenSelect';
 import ClaimsChart from '@/components/ClaimsChart';
@@ -11,7 +11,25 @@ import { toast } from 'sonner';
 import { ClaimsList } from '@/components/ClaimsList';
 import { ClaimsStats } from '@/components/ClaimsStats';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { 
+  CalendarIcon, 
+  DollarSign, 
+  LinkIcon, 
+  X 
+} from "lucide-react";
+import Image from "next/image";
 
 interface ClaimEntry {
   tokenId: string;
@@ -134,7 +152,7 @@ export default function ClaimsPage() {
   return (
     <div className="min-h-screen bg-background p-6 ">
       <div className="max-w-7xl mx-auto space-y-6 ">
-        <ClaimsStats claims={claims} />
+      <EnhancedClaimsStats claims={claims} />
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-card-foreground">Claims Overview</h2>
           <Button 
@@ -164,138 +182,192 @@ export default function ClaimsPage() {
             />
           </div>
         </div>
-        <Dialog open={isNewClaimOpen} onOpenChange={setIsNewClaimOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>New Claim Entry</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full p-2 border rounded bg-background text-foreground"
-                  required
-                />
-              </div>
+        {/* Dialog Component */}
+        {/* New Claim Dialog */}
+<Dialog open={isNewClaimOpen} onOpenChange={setIsNewClaimOpen}>
+  <DialogContent className="max-w-2xl">
+    <DialogHeader>
+      <DialogTitle className="text-xl font-semibold">New Claim Entry</DialogTitle>
+      <DialogDescription className="text-muted-foreground">
+        Enter the details for your new claim. All amounts are in USD.
+      </DialogDescription>
+    </DialogHeader>
 
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">
-                  Tokens
-                </label>
-                <div className="space-y-2">
-                  {selectedTokens.map(token => (
-                    <div key={token.id} className="flex items-center space-x-2">
-                      <span className="w-24">{token.symbol}</span>
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-2">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          onChange={(e) => handleTokenAmountChange(token.id, parseFloat(e.target.value))}
-                          className="w-full p-2 pl-6 border rounded bg-background text-foreground"
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-                  ))}
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Date Selection */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Date
+        </Label>
+        <div className="relative">
+          <CalendarIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+            required
+          />
+        </div>
+      </div>
+
+      {/* Token Selection */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Selected Tokens</Label>
+        <Card className="p-4 bg-muted/50">
+          <div className="space-y-3">
+            {selectedTokens.map(token => (
+              <div key={token.id} className="flex items-center gap-4">
+                <div className="w-24 flex items-center gap-2">
+                  <Image
+                    src={token.image || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
+                    alt={token.symbol}
+                    width={24}
+                    height={24}
+                    className="rounded-full"
+                  />
+                  <span className="font-medium">{token.symbol}</span>
                 </div>
-                <TokenSelect
-                  tokens={tokens}
-                  selectedTokens={selectedTokens}
-                  onTokensChange={(token: Token) => {
-                    if (!selectedTokens.find(t => t.id === token.id)) {
-                      setSelectedTokens([...selectedTokens, token]); 
-                    }
-                  }}
-                />
-              </div>
-              {/* Transaction URL field */}
-              <div className="pt-4 border-t">
-                <label className="block text-sm font-medium text-muted-foreground mb-1">
-                  Transaction URL (optional)
-                </label>
-                <div className="relative">
-                  {txn && (
-                    <a
-                      href={txn}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute right-3 top-2.5 text-primary hover:text-primary/80"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  )}
+                <div className="relative flex-1">
+                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <input
-                    type="url"
-                    value={txn}
-                    onChange={(e) => setTxn(e.target.value)}
-                    placeholder="Transaction URL"
-                    className="w-full p-2 border rounded bg-background text-foreground pr-10"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    onChange={(e) => handleTokenAmountChange(token.id, parseFloat(e.target.value))}
+                    className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="0.00"
                   />
                 </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="heldForTaxes"
-                    checked={heldForTaxes}
-                    onChange={(e) => setHeldForTaxes(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <label htmlFor="heldForTaxes" className="text-foreground">Hold amount for taxes</label>
-                </div>
-                
-                
-                {heldForTaxes && (
-                  <div className="mt-2 relative">
-                    <span className="absolute left-3 top-2">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={taxAmount}
-                      onChange={(e) => setTaxAmount(parseFloat(e.target.value))}
-                      className="w-full p-2 pl-6 border rounded bg-background text-foreground"
-                      placeholder="Tax amount to hold"
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-4 border-t">
-                <div className="text-right text-lg font-bold">
-                  Total: ${totalAmount.toFixed(2)}
-                </div>
-                {heldForTaxes && (
-                  <div className="text-right text-sm text-gray-600">
-                    Net after tax hold: ${(totalAmount - taxAmount).toFixed(2)}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button 
-                  type="button" 
-                  variant="outline"
-                  onClick={() => setIsNewClaimOpen(false)}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSelectedTokens(tokens => tokens.filter(t => t.id !== token.id))}
+                  className="text-muted-foreground hover:text-destructive"
                 >
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  Submit Claim
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <TokenSelect
+              tokens={tokens}
+              selectedTokens={selectedTokens}
+              onTokensChange={(token: Token) => {
+                if (!selectedTokens.find(t => t.id === token.id)) {
+                  setSelectedTokens([...selectedTokens, token]); 
+                }
+              }}
+            />
+          </div>
+        </Card>
+      </div>
+
+      {/* Transaction URL */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">
+          Transaction URL <span className="text-muted-foreground">(optional)</span>
+        </Label>
+        <div className="relative">
+          <LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="url"
+            value={txn}
+            onChange={(e) => setTxn(e.target.value)}
+            placeholder="Paste transaction URL here"
+            className="w-full pl-9 pr-10 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+          {txn && (
+            <a
+              href={txn}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute right-3 top-2.5 text-primary hover:text-primary/80"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Tax Withholding Section */}
+<div>
+<div className="flex items-center gap-2">
+<input
+type="checkbox"
+id="heldForTaxes"
+checked={heldForTaxes}
+onChange={(e) => setHeldForTaxes(e.target.checked)}
+className="h-4 w-4 rounded border-muted-foreground/25"
+/>
+<Label htmlFor="heldForTaxes" className="text-foreground">
+Hold amount for taxes
+</Label>
+</div>
+{heldForTaxes && (
+<div className="mt-2 relative">
+<span className="absolute left-3 top-2.5">$</span>
+<input
+type="number"
+step="0.01"
+min="0"
+value={taxAmount}
+onChange={(e) => setTaxAmount(parseFloat(e.target.value))}
+className="w-full pl-8 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+placeholder="Tax amount to hold"
+/>
+</div>
+)}
+</div>
+
+      {/* Summary Section */}
+      <Card className="p-4">
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Total Amount</span>
+            <span className="text-lg font-bold">
+              ${totalAmount.toFixed(2)}
+            </span>
+          </div>
+          {heldForTaxes && (
+            <>
+              <Separator />
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Tax Hold</span>
+                <Badge variant="secondary">
+                  ${taxAmount.toFixed(2)}
+                </Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Net After Tax</span>
+                <Badge variant="outline">
+                  ${(totalAmount - taxAmount).toFixed(2)}
+                </Badge>
+              </div>
+            </>
+          )}
+        </div>
+      </Card>
+
+      <div className="flex justify-end gap-2">
+        <Button 
+          type="button" 
+          variant="outline"
+          onClick={() => setIsNewClaimOpen(false)}
+        >
+          Cancel
+        </Button>
+        <Button type="submit">
+          Submit Claim
+        </Button>
+      </div>
+    </form>
+  </DialogContent>
+</Dialog>
         <ClaimsList 
           claims={claims.map(claim => ({
             ...claim,

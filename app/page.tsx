@@ -4,7 +4,7 @@ import { Entry, TransactionType, ExpenseDetails } from '@/types';
 import { PaginatedTable } from '@/components/PaginatedTable';
 import { ExpenseCategoryChart } from '@/components/ExpenseCategoryChart';
 import { DistributionOverview } from '@/components/DistributionOverview';
-import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plus, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { NewEntryDialog } from '@/components/NewEntryDialog';
 
@@ -26,10 +26,29 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Fetch entries
         const entriesResponse = await fetch('/api/entries');
         if (!entriesResponse.ok) throw new Error('Failed to load entries');
         const entriesData = await entriesResponse.json();
-        setEntries(entriesData);
+
+        // Fetch trades
+        const tradesResponse = await fetch('/api/trades');
+        if (!tradesResponse.ok) throw new Error('Failed to load trades');
+        const tradesData = await tradesResponse.json();
+
+        // Convert trades to entries format
+        const tradeEntries = tradesData.trades.map((trade: any) => ({
+          id: trade.id,
+          type: 'Trade',
+          amount: trade.purchasePrice * trade.quantity,
+          date: trade.purchaseDate,
+          tokenSymbol: trade.tokenSymbol,
+          pnl: trade.realizedPnl,
+          status: trade.status
+        }));
+
+        // Combine entries and trades
+        setEntries([...entriesData, ...tradeEntries]);
       } catch (error) {
         console.error('Error loading data:', error);
         toast.error('Failed to load some data');
@@ -117,7 +136,7 @@ const Dashboard: React.FC = () => {
       .reduce((sum, entry) => sum + entry.amount, 0);
 
     const totalTrades = entries
-      .filter(entry => entry.type === 'Trades')
+      .filter(entry => entry.type === 'Trade' && entry.status === 'closed')
       .reduce((sum, entry) => sum + (entry.pnl || 0), 0);
 
     return { totalIncome, totalExpenses, totalClaims, totalTrades };
@@ -196,7 +215,17 @@ const Dashboard: React.FC = () => {
             <h3 className="text-sm font-medium text-muted-foreground">Trading P/L</h3>
             <TrendingUp className="h-4 w-4 text-primary" />
           </div>
-          <p className="text-2xl font-bold">${stats.totalTrades.toFixed(2)}</p>
+          <p className={`text-2xl font-bold ${stats.totalTrades >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            ${Math.abs(stats.totalTrades).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+            {stats.totalTrades >= 0 ? (
+              <ArrowUpRight className="inline h-4 w-4 ml-1" />
+            ) : (
+              <ArrowDownRight className="inline h-4 w-4 ml-1" />
+            )}
+          </p>
         </div>
       </div>
 

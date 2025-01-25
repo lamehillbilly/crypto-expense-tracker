@@ -17,6 +17,7 @@ interface ChartProps {
 interface ChartData {
   date: string;
   total: number;
+  trend: number;
   tokenTotals: Record<string, number>;
 }
 
@@ -35,6 +36,10 @@ const chartConfig = {
   total: {
     label: "Total Claims",
     color: "hsl(var(--chart-1))",
+  },
+  trend: {
+    label: "Trend",
+    color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
@@ -85,7 +90,25 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
       return acc;
     }, {} as Record<string, GroupedData>);
 
-    return Object.values(groupedData);
+    const dataArray = Object.values(groupedData);
+    
+    // Calculate moving average based on timeframe
+    const periods = timeframe === 'day' ? 7 : timeframe === 'week' ? 4 : 3;
+    
+    // Add trend line (moving average)
+    const dataWithTrend = dataArray.map((item, index) => {
+      const startIndex = Math.max(0, index - periods + 1);
+      const endIndex = index + 1;
+      const subset = dataArray.slice(startIndex, endIndex);
+      const average = subset.reduce((sum, curr) => sum + curr.total, 0) / subset.length;
+
+      return {
+        ...item,
+        trend: average
+      };
+    });
+
+    return dataWithTrend;
   }, [data, timeframe]);
 
   const formatDate = (dateStr: string) => {
@@ -117,7 +140,7 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
     label 
   }: { 
     active?: boolean; 
-    payload?: Array<{ payload: ChartData; value: number }>; 
+    payload?: Array<{ payload: ChartData; value: number; name: string }>; 
     label?: string; 
   }) => {
     if (active && payload && payload.length > 0) {
@@ -137,6 +160,11 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
             <p className="text-sm flex justify-between items-center font-medium">
               <span>Total:</span>
               <span>{formatValue(data.total)}</span>
+            </p>
+            {/* Trend value */}
+            <p className="text-sm flex justify-between items-center font-medium">
+              <span>Trend:</span>
+              <span>{formatValue(data.trend)}</span>
             </p>
             {/* Token breakdown */}
             {data.tokenTotals && Object.keys(data.tokenTotals).length > 0 && (
@@ -174,7 +202,7 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
         <CardDescription>
           {timeframe === 'day' ? 'Daily' : 
            timeframe === 'week' ? 'Weekly' : 
-           'Monthly'} claim totals
+           'Monthly'} claim totals with trend line
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -218,6 +246,15 @@ const ClaimsChart = ({ data = [], timeframe }: ChartProps) => {
                   activeDot={{
                     r: 6,
                   }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="trend"
+                  name="Trend"
+                  stroke="var(--color-trend)"
+                  strokeWidth={2}
+                  dot={false}
+                  strokeDasharray="5 5"
                 />
               </LineChart>
             </ResponsiveContainer>

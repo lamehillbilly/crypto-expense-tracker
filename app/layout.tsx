@@ -4,7 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Toaster } from 'sonner';
-import Link from 'next/link';
+import { Navigation } from "@/components/Navigation";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,26 +27,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <nav className="border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between h-16">
-                <div className="flex space-x-8">
-                  <Link 
-                    href="/" 
-                    className="inline-flex items-center px-1 pt-1 text-sm font-medium"
-                  >
-                    Home
-                  </Link>
-                  <Link 
-                    href="/claims" 
-                    className="inline-flex items-center px-1 pt-1 text-sm font-medium"
-                  >
-                    Claims
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </nav>
+          <Navigation />
           <main className="min-h-screen bg-background text-foreground">
             {children}
             <div className="fixed bottom-4 right-4 z-50">
