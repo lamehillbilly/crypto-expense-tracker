@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const { isCustomToken, ...tradeData } = body;
     
     console.log('Incoming trade data:', body);
 
     // Validate required fields
-    if (!body.tokenId || !body.tokenSymbol || !body.tokenName || 
-        !body.purchasePrice || !body.quantity || !body.purchaseDate) {
+    if (!tradeData.tokenId || !tradeData.tokenSymbol || !tradeData.tokenName || 
+        !tradeData.purchasePrice || !tradeData.quantity || !tradeData.purchaseDate) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
     while (retries > 0) {
       try {
         const tokenInfoResponse = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(body.tokenId)}?localization=false&tickers=false&community_data=false&developer_data=false`,
+          `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(tradeData.tokenId)}?localization=false&tickers=false&community_data=false&developer_data=false`,
           {
             headers: {
               'Accept': 'application/json',
@@ -69,126 +71,88 @@ export async function POST(request: Request) {
     // Create the trade with available info
     const trade = await prisma.trade.create({
       data: {
-        tokenId: body.tokenId,
-        tokenSymbol: body.tokenSymbol.toUpperCase(),
-        tokenName: body.tokenName,
-        tokenImage: body.tokenImage || tokenInfo?.image?.small || null,
+        ...tradeData,
+        tokenImage: tradeData.tokenImage || tokenInfo?.image?.small || null,
         marketCapRank: tokenInfo?.market_cap_rank ? parseInt(tokenInfo.market_cap_rank.toString()) : null,
-        purchasePrice: Number(body.purchasePrice),
-        quantity: Number(body.quantity),
-        purchaseDate: new Date(body.purchaseDate),
         status: 'open',
-        currentPrice: Number(body.purchasePrice),
+        currentPrice: Number(tradeData.purchasePrice),
         unrealizedPnl: 0,
-        realizedPnl: 0
+        realizedPnl: 0,
+        isCustomToken: isCustomToken || false,
       },
     });
 
-    return NextResponse.json({ success: true, trade });
+    return NextResponse.json(trade);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : null;
-    
-    console.error('Trade creation failed:', { message: errorMessage, details: errorDetails });
-    
-    return NextResponse.json({
-      success: false,
-      error: errorMessage,
-      details: errorDetails
-    }, { status: 500 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error('Database error:', {
+        code: error.code,
+        message: error.message,
+        meta: error.meta
+      });
+    } else {
+      console.error('Unknown error:', error);
+    }
+
+    return NextResponse.json(
+      { 
+        error: 'Failed to create trade',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
   }
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    // First, test the database connection
+    await prisma.$connect();
 
-    // First get all trades with their history
     const trades = await prisma.trade.findMany({
-      where: status ? { status } : undefined,
-      orderBy: { purchaseDate: 'desc' },
       include: {
-        tradeHistory: {
+        TradeHistory: {
           orderBy: {
             date: 'desc'
           }
         }
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
     });
 
-    // Calculate totals from all trades
-    const totals = await prisma.trade.aggregate({
-      _sum: {
-        realizedPnl: true
-      }
-    });
+    // Calculate total realized PnL
+    const totalRealizedPnL = trades.reduce((sum, trade) => sum + (trade.realizedPnl || 0), 0);
 
-    // For open trades, fetch current prices and calculate unrealized P/L
-    const updatedTrades = await Promise.all(trades.map(async (trade) => {
-      if (trade.status === 'closed') {
-        return {
-          ...trade,
-          realizedPnl: trade.realizedPnl || 0
-        };
-      }
-
-      try {
-        // Fetch current price from CoinGecko
-        const response = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${trade.tokenId}&vs_currencies=usd`,
-          {
-            headers: {
-              'Accept': 'application/json'
-            }
-          }
-        );
-
-        if (!response.ok) {
-          console.error(`Failed to fetch price for ${trade.tokenId}:`, await response.text());
-          throw new Error('Failed to fetch price');
-        }
-
-        const data = await response.json();
-        const currentPrice = data[trade.tokenId]?.usd;
-
-        if (!currentPrice) {
-          throw new Error(`No price data for ${trade.tokenId}`);
-        }
-
-        // Calculate unrealized P/L
-        const unrealizedPnl = (currentPrice - trade.purchasePrice) * trade.quantity;
-
-        return {
-          ...trade,
-          currentPrice,
-          unrealizedPnl,
-        };
-      } catch (error) {
-        console.error(`Error fetching price for ${trade.tokenId}:`, error);
-        // Return trade with purchase price as current price if API call fails
-        return {
-          ...trade,
-          currentPrice: trade.purchasePrice,
-          unrealizedPnl: 0,
-        };
-      }
-    }));
-
-    // Calculate total realized P/L and estimated tax
-    const totalRealizedPnL = totals._sum.realizedPnl || 0;
-    const totalTaxEstimate = totalRealizedPnL > 0 ? totalRealizedPnL * 0.35 : 0;
+    // Calculate total tax estimate (example: 30% of realized gains)
+    const totalTaxEstimate = Math.max(0, totalRealizedPnL * 0.30);
 
     return NextResponse.json({
-      trades: updatedTrades,
+      trades,
       totalRealizedPnL,
       totalTaxEstimate
     });
   } catch (error) {
-    console.error('Error fetching trades:', error);
+    // More detailed error logging
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error('Database error:', {
+        code: error.code,
+        message: error.message,
+        meta: error.meta
+      });
+    } else {
+      console.error('Unknown error:', error);
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch trades' },
+      { 
+        error: 'Failed to fetch trades',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 } 

@@ -1,10 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+
+  @@index([name])
+}
+
+model Claim {
+  id          String        @id
+  date        DateTime
+  taxAmount   Float?
+  txn         String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  TokenAmount TokenAmount[]
+
+  @@index([date])
 }
 
 model Entry {
@@ -20,77 +41,6 @@ model Entry {
   status         String   @default("open")
 }
 
-model Trade {
-  id            Int           @id @default(autoincrement())
-  tokenId       String
-  tokenSymbol   String
-  tokenName     String
-  tokenImage    String?
-  marketCapRank Int?
-  purchasePrice Float
-  quantity      Float
-  currentPrice  Float?
-  purchaseDate  DateTime
-  closeDate     DateTime?
-  closePrice    Float?
-  status        String        @default("open")
-  unrealizedPnl Float?
-  realizedPnl   Float         @default(0)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  tradeHistory  TradeHistory[]
-
-  @@index([status])
-  @@index([tokenId])
-}
-
-model TradeHistory {
-  id        Int      @id @default(autoincrement())
-  tradeId   Int
-  date      DateTime
-  amount    Float
-  price     Float
-  type      String   // 'close' or 'partial_close'
-  pnl       Float
-  trade     Trade    @relation(fields: [tradeId], references: [id])
-  createdAt DateTime @default(now())
-
-  @@index([tradeId])
-  @@index([date])
-}
-
-model Category {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-}
-
-model Claim {
-  id           String        @id @default(cuid())
-  date         DateTime
-  taxAmount    Float?
-  txn          String?
-  tokenAmounts TokenAmount[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  @@index([date])
-}
-
-model TokenAmount {
-  id      String @id @default(cuid())
-  token   String
-  amount  Float
-  claim   Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  claimId String
-
-  @@index([claimId])
-  @@index([token])
-}
-
 model PnlRecord {
   id          Int      @id @default(autoincrement())
   date        DateTime
@@ -102,4 +52,55 @@ model PnlRecord {
 
   @@index([date])
   @@index([tokenSymbol])
+}
+
+model TokenAmount {
+  id      String @id
+  token   String
+  amount  Float
+  claimId String
+  Claim   Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([token])
+}
+
+model Trade {
+  id            Int            @id @default(autoincrement())
+  tokenId       String
+  tokenSymbol   String
+  tokenName     String
+  tokenImage    String?
+  marketCapRank Int?
+  purchasePrice Float
+  quantity      Float
+  currentPrice  Float?
+  purchaseDate  DateTime
+  closeDate     DateTime?
+  closePrice    Float?
+  status        String         @default("open")
+  unrealizedPnl Float?
+  realizedPnl   Float          @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  isCustomToken Boolean        @default(false)
+  TradeHistory  TradeHistory[]
+
+  @@index([status])
+  @@index([tokenId])
+}
+
+model TradeHistory {
+  id        Int      @id @default(autoincrement())
+  tradeId   Int
+  date      DateTime
+  amount    Float
+  price     Float
+  type      String
+  pnl       Float
+  createdAt DateTime @default(now())
+  Trade     Trade    @relation(fields: [tradeId], references: [id])
+
+  @@index([date])
+  @@index([tradeId])
 }

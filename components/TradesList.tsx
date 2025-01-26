@@ -17,7 +17,8 @@ import {
   Trash2, 
   ChevronRight, 
   ChevronDown,
-  DollarSign
+  DollarSign,
+  Link
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -52,6 +53,7 @@ interface Trade {
   closePrice?: number;
   tradeHistory?: TradeHistory[];
   marketCapRank?: number;
+  isCustomToken: boolean;
 }
 
 interface TradesListProps {
@@ -197,6 +199,24 @@ export function TradesList({ trades, onUpdate }: TradesListProps) {
     );
   };
 
+  const handleEdit = async (trade: Trade) => {
+    try {
+      // Only allow editing open trades
+      if (trade.status !== 'open') {
+        toast.error('Can only edit open trades');
+        return;
+      }
+
+      setSelectedTrade(trade);
+      setCloseAmount(trade.quantity.toString());
+      setClosePrice(trade.currentPrice?.toString() || trade.purchasePrice.toString());
+      setIsClosing(true);
+    } catch (error) {
+      console.error('Error editing trade:', error);
+      toast.error('Failed to edit trade');
+    }
+  };
+
   return (
     <>
       <div className="rounded-md border">
@@ -285,29 +305,25 @@ export function TradesList({ trades, onUpdate }: TradesListProps) {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2 justify-end">
                       {trade.status === 'open' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedTrade(trade);
-                            setIsClosing(true);
-                          }}
-                        >
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          Close
-                        </Button>
+                        <>
+                          <button
+                            onClick={() => handleEdit(trade)}
+                            className="p-1 hover:bg-accent rounded"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          {trade.isCustomToken && (
+                            <button
+                              onClick={() => setEditingToken(trade)}
+                              className="p-1 hover:bg-accent rounded"
+                            >
+                              <Link className="h-4 w-4" />
+                            </button>
+                          )}
+                        </>
                       )}
-                      <button
-                        onClick={() => {
-                          setSelectedTrade(trade);
-                          setIsEditing(true);
-                        }}
-                        className="p-2 hover:bg-muted rounded-full"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
                       <button
                         onClick={() => handleDeleteTrade(trade.id!)}
                         className="p-2 hover:bg-red-100 rounded-full text-red-500"

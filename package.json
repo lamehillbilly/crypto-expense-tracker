@@ -7,7 +7,9 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:backup": "bash backups/backup-db.sh",
+    "db:restore": "bash backups/restore-db.sh"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
@@ -18,10 +20,13 @@
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-switch": "^1.1.2",
+    "@radix-ui/react-tabs": "^1.1.2",
     "@types/jsonwebtoken": "^9.0.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "1.0.0",
     "date-fns": "^4.1.0",
+    "ethers": "^6.13.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.474.0",
     "next": "^15.1.6",
@@ -37,6 +42,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@shadcn/ui": "^0.0.4",
     "@types/node": "^20",
     "@types/papaparse": "^5.3.15",
     "@types/react": "^18",

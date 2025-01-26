@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Table,
   TableBody,
@@ -10,6 +10,15 @@ import {
 import { ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { EditClaimDialog } from '@/components/EditClaimDialog';
+import { getAddress } from 'ethers';
+
+interface TokenMetadata {
+  id: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  price: number;
+}
 
 interface Claim {
   id: string;
@@ -25,9 +34,63 @@ interface ClaimsListProps {
   onClaimUpdate: () => void;
 }
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export function ClaimsList({ claims, onClaimUpdate }: ClaimsListProps) {
   const [editingClaim, setEditingClaim] = useState<Claim | null>(null);
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
+  const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+
+  useEffect(() => {
+    const fetchTokenMetadata = async (retries = 3) => {
+      try {
+        const response = await fetch('https://pharaoh-api-production.up.railway.app/tokens');
+        
+        if (response.status === 429 && retries > 0) {
+          // Wait for 2 seconds before retrying
+          await delay(2000);
+          return fetchTokenMetadata(retries - 1);
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const tokens: TokenMetadata[] = await response.json();
+        
+        const tokenMap = tokens.reduce((acc, token) => {
+          if (token.symbol && token.id) {
+            acc[token.symbol] = token;
+          }
+          return acc;
+        }, {} as Record<string, TokenMetadata>);
+        
+        setTokenMetadata(tokenMap);
+      } catch (error) {
+        console.error('Error fetching token metadata:', error);
+        if (retries > 0) {
+          // Wait for 2 seconds before retrying
+          await delay(2000);
+          return fetchTokenMetadata(retries - 1);
+        } else {
+          toast.error('Failed to load token metadata. Please refresh the page.');
+        }
+      }
+    };
+
+    fetchTokenMetadata();
+  }, []);
+
+  const getTokenLogoUrl = (tokenId: string) => {
+    if (!tokenId) return '';
+    try {
+      const checksumAddress = getAddress(tokenId);
+      return `https://raw.githubusercontent.com/RamsesExchange/ramses-assets/main/blockchains/avalanche/assets/${checksumAddress}/logo.png`;
+    } catch (error) {
+      console.error('Error converting address to checksum format:', error);
+      return '';
+    }
+  };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('default', {
@@ -55,7 +118,7 @@ export function ClaimsList({ claims, onClaimUpdate }: ClaimsListProps) {
         if (!response.ok) throw new Error('Failed to delete claim');
         
         toast.success('Claim deleted successfully');
-        onClaimUpdate(); // Refresh claims list
+        onClaimUpdate();
       } catch (error) {
         toast.error('Failed to delete claim');
         console.error('Error deleting claim:', error);
@@ -148,7 +211,7 @@ export function ClaimsList({ claims, onClaimUpdate }: ClaimsListProps) {
                   <TableCell className="text-right">
                     <button
                       onClick={() => toggleRow(Number(claim.id))}
-                      className="p-1 hover:bg-gray-100 rounded"
+                      className="p-1 hover:bg-accent rounded"
                     >
                       {expandedRows.includes(Number(claim.id)) ? (
                         <ChevronUp className="h-4 w-4" />
@@ -160,14 +223,36 @@ export function ClaimsList({ claims, onClaimUpdate }: ClaimsListProps) {
                 </TableRow>
                 {expandedRows.includes(Number(claim.id)) && (
                   <TableRow>
-                    <TableCell colSpan={6} className="bg-muted/50 p-4">
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-muted-foreground">Token Breakdown</h4>
-                        <div className="grid gap-2">
+                    <TableCell colSpan={6} className="bg-muted/40 p-0">
+                      <div className="py-2 px-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-3">
                           {Object.entries(claim.tokenTotals || {}).map(([token, amount]) => (
-                            <div key={token} className="flex items-center justify-between text-sm">
-                              <span className="font-medium">{token}</span>
-                              <span>{formatAmount(amount)}</span>
+                            <div 
+                              key={token} 
+                              className="flex items-center gap-3 p-2 rounded-lg bg-background/60 border border-border/50 hover:border-border transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {tokenMetadata[token] && (
+                                  <div className="relative flex-shrink-0">
+                                    <img 
+                                      src={getTokenLogoUrl(tokenMetadata[token].id)}
+                                      alt={token}
+                                      className="w-6 h-6 rounded-full bg-muted"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate text-sm">
+                                    {token}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatAmount(amount)}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>

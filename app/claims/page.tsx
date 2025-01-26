@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { ClaimsList } from '@/components/ClaimsList';
 import { ClaimsStats } from '@/components/ClaimsStats';
 import { Button } from '@/components/ui/button';
+import TabbedClaimsChart from '@/components/ClaimsChart';
 import { 
   Dialog,
   DialogContent,
@@ -30,6 +31,7 @@ import {
   X 
 } from "lucide-react";
 import Image from "next/image";
+import { getAddress } from 'ethers'
 
 interface ClaimEntry {
   tokenId: string;
@@ -57,6 +59,7 @@ export default function ClaimsPage() {
   const [claims, setClaims] = useState<Entry[]>([]);
   const [txn, setTxn] = useState<string>('');
   const [isNewClaimOpen, setIsNewClaimOpen] = useState(false);
+  const [imageError, setImageError] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const fetchClaims = async () => {
@@ -149,10 +152,24 @@ export default function ClaimsPage() {
       });
     }
   };
+
+  const normalizeAddress = (address: string) => {
+    try {
+      return getAddress(address)
+    } catch (error) {
+      console.warn('Invalid address:', address)
+      return address
+    }
+  }
+
+  const getTokenImage = (address: string) => {
+    return `https://raw.githubusercontent.com/RamsesExchange/ramses-assets/main/blockchains/avalanche/assets/${address}/logo.png`
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6 ">
-      <div className="max-w-7xl mx-auto space-y-6 ">
-      <EnhancedClaimsStats claims={claims} />
+    <div className="min-h-screen bg-background p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <EnhancedClaimsStats claims={claims} />
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold text-card-foreground">Claims Overview</h2>
           <Button 
@@ -163,25 +180,41 @@ export default function ClaimsPage() {
             New Claim
           </Button>
         </div>
-        <div className="bg-card p-6 rounded-lg shadow">
-          <div className="flex justify-end items-center mb-4 ">
-            <select
-              value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value as 'day' | 'week' | 'month')}
-              className="p-2 border rounded bg-background text-foreground"
-            >
-              <option value="day">Daily</option>
-              <option value="week">Weekly</option>
-              <option value="month">Monthly</option>
-            </select>
+        <div className="bg-card rounded-lg shadow h-[500px] ">
+          <div className="p-6">
+            <div className="flex justify-end items-center mb-4">
+              <select
+                value={timeframe}
+                onChange={(e) => setTimeframe(e.target.value as 'day' | 'week' | 'month')}
+                className="p-2 border rounded bg-background text-foreground"
+              >
+                <option value="day">Daily</option>
+                <option value="week">Weekly</option>
+                <option value="month">Monthly</option>
+              </select>
+            </div>
           </div>
-          <div className="h-96">
-            <ClaimsChart 
-              data={claims}
-              timeframe={timeframe}
-            />
-          </div>
+          <TabbedClaimsChart
+            data={claims}
+            timeframe={timeframe}
+          />
         </div>
+        
+        <div className="mt-8 space-y-8 pt-16">
+          <ClaimsList 
+            claims={claims.map(claim => ({
+              ...claim,
+              id: String(claim.id)
+            })) as Claim[]}
+            onClaimUpdate={() => {
+              fetch('/api/claims')
+                .then(response => response.json())
+                .then(data => setClaims(data))
+                .catch(error => console.error('Error fetching claims:', error));
+            }} 
+          />
+        </div>
+        
         {/* Dialog Component */}
         {/* New Claim Dialog */}
 <Dialog open={isNewClaimOpen} onOpenChange={setIsNewClaimOpen}>
@@ -219,13 +252,27 @@ export default function ClaimsPage() {
             {selectedTokens.map(token => (
               <div key={token.id} className="flex items-center gap-4">
                 <div className="w-24 flex items-center gap-2">
-                  <Image
-                    src={token.image || `https://api.dicebear.com/7.x/shapes/svg?seed=${token.symbol}`}
-                    alt={token.symbol}
-                    width={24}
-                    height={24}
-                    className="rounded-full"
-                  />
+                  {imageError[token.address] ? (
+                    <div className="w-6 h-6 rounded-full bg-muted-foreground/10 flex items-center justify-center">
+                      <span className="text-xs font-medium">
+                        {token.symbol.slice(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                  ) : (
+                    <Image
+                      src={getTokenImage(token.address)}
+                      alt={token.symbol}
+                      width={24}
+                      height={24}
+                      className="rounded-full"
+                      onError={() => {
+                        setImageError(prev => ({
+                          ...prev,
+                          [token.address]: true
+                        }))
+                      }}
+                    />
+                  )}
                   <span className="font-medium">{token.symbol}</span>
                 </div>
                 <div className="relative flex-1">
@@ -368,18 +415,7 @@ placeholder="Tax amount to hold"
     </form>
   </DialogContent>
 </Dialog>
-        <ClaimsList 
-          claims={claims.map(claim => ({
-            ...claim,
-            id: String(claim.id)
-          })) as Claim[]}
-          onClaimUpdate={() => {
-            fetch('/api/claims')
-              .then(response => response.json())
-              .then(data => setClaims(data))
-              .catch(error => console.error('Error fetching claims:', error));
-          }} 
-        />
+          
       </div>
     </div>
   );

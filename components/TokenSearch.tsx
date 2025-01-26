@@ -4,9 +4,16 @@ import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import Image from 'next/image';
 import type { Token } from '@/types/token';
+import { getAddress } from 'ethers'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 
 interface TokenSearchProps {
-  onSelect: (token: Token) => void;
+  onSelect: (token: {
+    id: string
+    address: string
+    symbol: string
+    image: string | null
+  }) => void;
   initialValue?: string;
 }
 
@@ -16,6 +23,7 @@ export function TokenSearch({ onSelect, initialValue }: TokenSearchProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const searchTokens = async () => {
@@ -70,88 +78,74 @@ export function TokenSearch({ onSelect, initialValue }: TokenSearchProps) {
 
   const handleTokenSelect = (token: Token) => {
     setSelectedToken(token);
-    onSelect(token);
+    onSelect({
+      id: token.id,
+      address: token.id,
+      symbol: token.symbol,
+      image: getTokenImage(token.id)
+    });
     setSearch('');
     setResults([]);
   };
 
-  return (
-    <div className="relative">
-      <div className="relative">
-        <input
-          type="text"
-          value={selectedToken ? selectedToken.name : search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setSelectedToken(null);
-          }}
-          className="w-full p-2 pl-8 border rounded bg-muted/50"
-          placeholder="Search tokens..."
-        />
-        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-      </div>
+  const normalizeAddress = (address: string) => {
+    try {
+      return getAddress(address)
+    } catch (error) {
+      console.warn('Invalid address:', address)
+      return address
+    }
+  }
 
-      {(results.length > 0 || isLoading || error) && !selectedToken && (
-        <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
-          {isLoading ? (
-            <div className="p-2 text-center text-muted-foreground">Loading...</div>
-          ) : error ? (
-            <div className="p-2 text-center text-red-500">{error}</div>
-          ) : (
-            results.map((token) => (
-              <div
-                key={token.id}
-                onClick={() => handleTokenSelect(token)}
-                className="p-2 hover:bg-muted cursor-pointer flex items-center gap-2"
-              >
-                <div className="relative w-8 h-8">
+  const getTokenImage = (tokenAddress: string) => {
+    try {
+      const normalizedAddress = normalizeAddress(tokenAddress)
+      return `https://raw.githubusercontent.com/RamsesExchange/ramses-assets/main/blockchains/avalanche/assets/${normalizedAddress}/logo.png`
+    } catch (error) {
+      return null
+    }
+  }
+
+  return (
+    <Command>
+      <CommandInput placeholder="Search tokens..." />
+      <CommandList>
+        <CommandEmpty>No tokens found.</CommandEmpty>
+        <CommandGroup>
+          {results.map((token) => (
+            <CommandItem
+              key={token.id}
+              value={token.symbol}
+              onSelect={() => handleTokenSelect(token)}
+            >
+              <div className="flex items-center gap-2">
+                {imageError[token.id] || !getTokenImage(token.id) ? (
+                  <div className="w-6 h-6 rounded-full bg-muted-foreground/10 flex items-center justify-center">
+                    <span className="text-xs font-medium">
+                      {token.symbol.slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                ) : (
                   <Image
-                    src={token.thumb}
-                    alt={token.name}
-                    width={32}
-                    height={32}
+                    src={getTokenImage(token.id)!}
+                    alt={token.name || token.symbol}
+                    width={24}
+                    height={24}
                     className="rounded-full"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `data:image/svg+xml,${encodeURIComponent(
-                        `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-                          <rect width="32" height="32" fill="#f0f0f0"/>
-                          <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="12" fill="#666">
-                            ${token.symbol.slice(0, 3).toUpperCase()}
-                          </text>
-                        </svg>`
-                      )}`;
+                    onError={() => {
+                      setImageError(prev => ({
+                        ...prev,
+                        [token.id]: true
+                      }))
                     }}
                   />
-                </div>
-                <div>
-                  <div className="font-medium">{token.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {token.symbol.toUpperCase()}
-                    {token.market_cap_rank && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        Rank #{token.market_cap_rank}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                )}
+                <span>{token.name || token.symbol}</span>
               </div>
-            ))
-          )}
-        </div>
-      )}
-      
-      {selectedToken && (
-        <button
-          onClick={() => {
-            setSelectedToken(null);
-            setSearch('');
-          }}
-          className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
-    </div>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
   );
 }
