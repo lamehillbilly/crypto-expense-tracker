@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { TrendingUp, Home, Receipt } from 'lucide-react';
+import { TrendingUp, Home, Receipt, DollarSign } from 'lucide-react';
 
 function NavLink({ href, children, icon: Icon }: { href: string; children: React.ReactNode; icon?: React.ElementType }) {
   const pathname = usePathname();
@@ -34,6 +34,9 @@ export function Navigation() {
             </NavLink>
             <NavLink href="/trades" icon={TrendingUp}>
               Trades
+            </NavLink>
+            <NavLink href="/expenses" icon={DollarSign}>
+              Expenses
             </NavLink>
           </div>
         </div>

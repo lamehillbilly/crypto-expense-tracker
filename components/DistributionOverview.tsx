@@ -1,8 +1,19 @@
 'use client';
-import React, { useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { useTheme } from 'next-themes';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+
+import React, { useMemo } from 'react';
+import { Label, Pie, PieChart } from 'recharts';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart';
 
 interface Props {
   data: {
@@ -12,60 +23,97 @@ interface Props {
   }[];
 }
 
+const chartConfig = {
+  value: {
+    label: 'Amount',
+  },
+  income: {
+    label: 'Income',
+    color: 'hsl(var(--chart-2))',
+  },
+  expenses: {
+    label: 'Expenses',
+    color: 'hsl(var(--chart-1))',
+  },
+  claims: {
+    label: 'Claims',
+    color: 'hsl(var(--chart-3))',
+  },
+  trades: {
+    label: 'Trades',
+    color: 'hsl(var(--chart-4))',
+  },
+};
+
 export function DistributionOverview({ data }: Props) {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-  const [isExpanded, setIsExpanded] = useState(false);
+  const chartData = useMemo(() => {
+    return data.map(item => ({
+      category: item.name,
+      value: item.value,
+      fill: `hsl(var(${item.color}))`,
+    }));
+  }, [data]);
+
+  const totalValue = useMemo(() => {
+    return data.reduce((acc, curr) => acc + curr.value, 0);
+  }, [data]);
 
   return (
-    <div className="w-full bg-card rounded-lg">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-      >
-        <h2 className="text-lg font-semibold">Distribution Overview</h2>
-        {isExpanded ? (
-          <ChevronUp className="h-5 w-5 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-        )}
-      </button>
-
-      {isExpanded && (
-        <div className="p-4 pt-0 h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                outerRadius={150}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={`hsl(var(${entry.color}))`}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value) => `$${Number(value).toFixed(2)}`}
-                contentStyle={{
-                  backgroundColor: isDark ? 'hsl(var(--card))' : 'hsl(var(--background))',
-                  border: '1px solid hsl(var(--border))',
-                  color: 'hsl(var(--foreground))'
+    <Card className="flex flex-col">
+      <CardHeader className="items-center pb-0">
+        <CardTitle>Distribution Overview</CardTitle>
+        <CardDescription>Financial Distribution Summary</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1 pb-0">
+        <ChartContainer
+          config={chartConfig}
+          className="mx-auto aspect-square max-h-64"
+        >
+          <PieChart>
+            <ChartTooltip
+              cursor={false}
+              content={<ChartTooltipContent />}
+            />
+            <Pie
+              data={chartData}
+              dataKey="value"
+              nameKey="category"
+              innerRadius={60}
+              strokeWidth={5}
+            >
+              <Label
+                content={({ viewBox }) => {
+                  if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                    return (
+                      <text
+                        x={viewBox.cx}
+                        y={viewBox.cy}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        <tspan
+                          x={viewBox.cx}
+                          y={viewBox.cy}
+                          className="fill-foreground text-2xl font-bold"
+                        >
+                          ${totalValue.toLocaleString()}
+                        </tspan>
+                        <tspan
+                          x={viewBox.cx}
+                          y={(viewBox.cy || 0) + 24}
+                          className="fill-muted-foreground text-sm"
+                        >
+                          Total Amount
+                        </tspan>
+                      </text>
+                    )
+                  }
                 }}
               />
-              <Legend 
-                formatter={(value) => <span className="text-foreground">{value}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
-} 
+}

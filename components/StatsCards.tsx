@@ -84,14 +84,14 @@ const EnhancedClaimsStats = ({ claims }) => {
                 <h3 className="text-3xl font-bold">
                   ${Math.abs(totalTaxHeld).toFixed(2)}
                   <span className="text-sm font-normal text-muted-foreground ml-2">
-                    {taxDifference >= 0 ? 'over' : 'under'}
+                    
                   </span>
                 </h3>
               </div>
             </div>
             <div className="space-y-2 mt-4">
               <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Under/Over</span>
+                <span className="text-sm text-muted-foreground">{taxDifference >= 0 ? 'Over' : 'Under'}</span>
                 <span className="font-medium">${taxDifference.toFixed(2)}</span>
               </div>
             </div>

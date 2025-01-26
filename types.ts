@@ -15,6 +15,8 @@ export interface Token {
   
   // Enhanced expense interface
   export interface ExpenseDetails {
+    color: string | undefined;
+    icon: string | undefined;
     taxDeductible: boolean;
     description: string;
     vendor: string;
@@ -57,7 +59,7 @@ export interface Token {
     tokenTotals: {};
     totalAmount: any;
     tradeDetails: TradeDetails;
-    id?: number;
+    id: string;
     type: TransactionType;
     amount: number;
     date: string;
@@ -65,11 +67,12 @@ export interface Token {
     tokenName?: string;
     purchaseAmount: number;
     purchaseDate: string;
-    status: string;
+    status?: 'open' | 'closed';
     pnl?: number;
     daysHeld?: number;
     expenseDetails?: ExpenseDetails;
     claimDetails?: ClaimDetails;
+    tokenSymbol?: string;
   }
   export interface PieChartData {
     name: string;

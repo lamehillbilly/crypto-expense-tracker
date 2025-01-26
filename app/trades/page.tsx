@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { Switch } from "@/components/ui/switch";
+import { DatePicker } from '@/components/DatePicker';
+import { CoinGeckoTokenSearch } from '@/components/TradeSearch';
 
 // Add the formatPnL function
 const formatPnL = (pnl: number | undefined) => {
@@ -43,14 +45,18 @@ const formatPnL = (pnl: number | undefined) => {
 
 interface Trade {
   id?: number;
+  tokenId: string;
   tokenSymbol: string;
   tokenName: string;
+  tokenImage?: string;
   purchasePrice: number;
   quantity: number;
+  purchaseDate: string;
   currentPrice?: number;
   unrealizedPnl?: number;
   realizedPnl?: number;
   status: 'open' | 'closed';
+  marketCapRank?: number | null;
 }
 
 interface TokenSearchResult {
@@ -58,6 +64,7 @@ interface TokenSearchResult {
   symbol: string;
   name: string;
   large: string;
+  image?: string;
 }
 
 interface CachedPrice {
@@ -212,89 +219,54 @@ export default function TradesPage() {
     }, 0),
   };
 
-  const getPriceFromCache = (tokenId: string): number | null => {
-    try {
-      const cache: PriceCache = JSON.parse(localStorage.getItem('priceCache') || '{}');
-      const cachedData = cache[tokenId];
-      
-      if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
-        return cachedData.price;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error reading from cache:', error);
-      return null;
-    }
-  };
-
-  const updatePriceCache = (tokenId: string, price: number) => {
-    try {
-      const cache: PriceCache = JSON.parse(localStorage.getItem('priceCache') || '{}');
-      cache[tokenId] = {
-        price,
-        timestamp: Date.now()
-      };
-      localStorage.setItem('priceCache', JSON.stringify(cache));
-    } catch (error) {
-      console.error('Error updating cache:', error);
-    }
-  };
-
   const fetchTrades = async () => {
     try {
       const response = await fetch('/api/trades');
-      if (!response.ok) throw new Error('Failed to fetch trades');
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to fetch trades:', errorData);
+        throw new Error(`Failed to fetch trades: ${errorData.message || response.statusText}`);
+      }
       const data = await response.json();
       
-      // Update trades with cached prices first
-      const tradesWithCachedPrices = data.trades.map((trade: Trade) => {
-        const cachedPrice = getPriceFromCache(trade.tokenId);
-        return {
-          ...trade,
-          currentPrice: cachedPrice || trade.purchasePrice
-        };
-      });
+      // Fetch current prices for all open trades
+      const openTrades = data.trades.filter((trade: Trade) => trade.status === 'open');
+      const tokenIds = openTrades.map((trade: Trade) => trade.tokenId);
       
-      setTrades(tradesWithCachedPrices);
+      if (tokenIds.length > 0) {
+        try {
+          const priceResponse = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${tokenIds.join(',')}&vs_currencies=usd`
+          );
+          
+          if (priceResponse.ok) {
+            const priceData = await priceResponse.json();
+            
+            // Update trades with current prices
+            const tradesWithPrices = data.trades.map((trade: Trade) => {
+              if (trade.status === 'open' && priceData[trade.tokenId]) {
+                const currentPrice = priceData[trade.tokenId].usd;
+                const unrealizedPnl = (currentPrice - trade.purchasePrice) * trade.quantity;
+                return {
+                  ...trade,
+                  currentPrice,
+                  unrealizedPnl
+                };
+              }
+              return trade;
+            });
+            
+            setTrades(tradesWithPrices);
+          }
+        } catch (error) {
+          console.error('Error fetching prices:', error);
+        }
+      }
+      
       setTotalRealizedPnL(data.totalRealizedPnL);
       setTotalTaxEstimate(data.totalTaxEstimate);
-
-      // Fetch new prices only for trades with expired cache
-      const priceUpdates = data.trades.map(async (trade: Trade) => {
-        if (!getPriceFromCache(trade.tokenId)) {
-          try {
-            const priceResponse = await fetch(
-              `https://api.coingecko.com/api/v3/simple/price?ids=${trade.tokenId}&vs_currencies=usd`
-            );
-            if (priceResponse.ok) {
-              const priceData = await priceResponse.json();
-              const currentPrice = priceData[trade.tokenId]?.usd;
-              if (currentPrice) {
-                updatePriceCache(trade.tokenId, currentPrice);
-                return { tokenId: trade.tokenId, price: currentPrice };
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching price for ${trade.tokenId}:`, error);
-          }
-        }
-        return null;
-      });
-
-      // Update trades with new prices
-      const priceResults = await Promise.all(priceUpdates);
-      setTrades(prevTrades => 
-        prevTrades.map(trade => {
-          const priceUpdate = priceResults.find(result => 
-            result?.tokenId === trade.tokenId
-          );
-          return priceUpdate 
-            ? { ...trade, currentPrice: priceUpdate.price }
-            : trade;
-        })
-      );
-
     } catch (error) {
+      console.error('Error in fetchTrades:', error);
       toast.error('Failed to load trades');
     }
   };
@@ -303,62 +275,68 @@ export default function TradesPage() {
     fetchTrades();
   }, []);
 
-  const handleSubmit = async (e: { preventDefault: () => void; }) => {
-    e.preventDefault();
-    
-    if (!isCustomToken && !selectedToken) {
-      toast.error('Please select a token');
-      return;
+  // In your TradesPage component, update the handleSubmit function:
+
+const handleSubmit = async (e: { preventDefault: () => void; }) => {
+  e.preventDefault();
+  
+  if (!isCustomToken && !selectedToken) {
+    toast.error('Please select a token');
+    return;
+  }
+
+  if (isCustomToken && (!customTokenData.symbol || !customTokenData.name)) {
+    toast.error('Please fill in token details');
+    return;
+  }
+
+  if (!purchasePrice || !quantity) {
+    toast.error('Please fill in all fields');
+    return;
+  }
+
+  try {
+    const tradeData = {
+      tokenId: isCustomToken ? `custom-${customTokenData.symbol.toLowerCase()}` : selectedToken!.id,
+      tokenSymbol: isCustomToken ? customTokenData.symbol.toUpperCase() : selectedToken!.symbol.toUpperCase(),
+      tokenName: isCustomToken ? customTokenData.name : selectedToken!.name,
+      tokenImage: isCustomToken ? customTokenData.image : selectedToken!.large, // Use large image from CoinGecko
+      purchaseDate: new Date(purchaseDate).toISOString(),
+      purchasePrice: parseFloat(purchasePrice),
+      quantity: parseFloat(quantity),
+      marketCapRank: selectedToken?.market_cap_rank || null,
+      status: 'open',
+      currentPrice: selectedToken?.current_price || parseFloat(purchasePrice),
+      unrealizedPnl: 0,
+      realizedPnl: 0,
+      isCustomToken: isCustomToken
+    };
+
+    console.log('Submitting trade data:', tradeData); // Debug log
+
+    const response = await fetch('/api/trades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tradeData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Failed to create trade:', errorData);
+      throw new Error(errorData.error || 'Failed to create trade');
     }
 
-    if (isCustomToken && (!customTokenData.symbol || !customTokenData.name)) {
-      toast.error('Please fill in token details');
-      return;
-    }
-
-    if (!purchasePrice || !quantity) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-
-    try {
-      // Format the date to include time component
-      const formattedDate = new Date(purchaseDate).toISOString();
-
-      const response = await fetch('/api/trades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tokenId: isCustomToken ? `custom-${customTokenData.symbol.toLowerCase()}` : selectedToken!.id,
-          tokenSymbol: isCustomToken ? customTokenData.symbol.toUpperCase() : selectedToken!.symbol.toUpperCase(),
-          tokenName: isCustomToken ? customTokenData.name : selectedToken!.name,
-          tokenImage: isCustomToken ? customTokenData.image || null : selectedToken!.large,
-          purchaseDate: formattedDate, // Use the formatted date
-          purchasePrice: parseFloat(purchasePrice),
-          quantity: parseFloat(quantity),
-          marketCapRank: null,
-          status: 'open',
-          currentPrice: parseFloat(purchasePrice), // Set initial current price to purchase price
-          unrealizedPnl: 0,
-          realizedPnl: 0,
-          isCustomToken: isCustomToken
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create trade');
-      }
-
-      toast.success('Trade added successfully');
-      setIsNewTradeOpen(false);
-      setIsCustomToken(false);
-      setCustomTokenData({ symbol: '', name: '', image: '' });
-      fetchTrades();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to add trade');
-    }
-  };
+    toast.success('Trade added successfully');
+    setIsNewTradeOpen(false);
+    setSelectedToken(null);
+    setIsCustomToken(false);
+    setCustomTokenData({ symbol: '', name: '', image: '' });
+    fetchTrades();
+  } catch (error) {
+    console.error('Error in handleSubmit:', error);
+    toast.error(error instanceof Error ? error.message : 'Failed to add trade');
+  }
+};
 
   return (
     <div className="container mx-auto p-4 space-y-6">
@@ -447,77 +425,65 @@ export default function TradesPage() {
       </div>
 
       {isCustomToken ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Token Symbol</Label>
-              <input
-                type="text"
-                value={customTokenData.symbol}
-                onChange={(e) => setCustomTokenData(prev => ({
-                  ...prev,
-                  symbol: e.target.value
-                }))}
-                className="w-full p-2 border rounded-lg bg-background"
-                placeholder="e.g., BTC"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Token Name</Label>
-              <input
-                type="text"
-                value={customTokenData.name}
-                onChange={(e) => setCustomTokenData(prev => ({
-                  ...prev,
-                  name: e.target.value
-                }))}
-                className="w-full p-2 border rounded-lg bg-background"
-                placeholder="e.g., Bitcoin"
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Token Image URL (optional)</Label>
-            <input
-              type="url"
-              value={customTokenData.image}
-              onChange={(e) => setCustomTokenData(prev => ({
-                ...prev,
-                image: e.target.value
-              }))}
-              className="w-full p-2 border rounded-lg bg-background"
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <Label>Select Token</Label>
-          <TokenSearch onSelect={setSelectedToken} />
-        </div>
-      )}
+  <div className="space-y-4">
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Token Symbol</Label>
+        <input
+          type="text"
+          value={customTokenData.symbol}
+          onChange={(e) => setCustomTokenData(prev => ({
+            ...prev,
+            symbol: e.target.value
+          }))}
+          className="w-full p-2 border rounded-lg bg-background"
+          placeholder="e.g., BTC"
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Token Name</Label>
+        <input
+          type="text"
+          value={customTokenData.name}
+          onChange={(e) => setCustomTokenData(prev => ({
+            ...prev,
+            name: e.target.value
+          }))}
+          className="w-full p-2 border rounded-lg bg-background"
+          placeholder="e.g., Bitcoin"
+          required
+        />
+      </div>
+    </div>
+  </div>
+) : (
+  <div className="space-y-2">
+    <Label>Select Token</Label>
+    <CoinGeckoTokenSearch 
+      onSelect={(token) => {
+        if (token) {
+          setSelectedToken({
+            id: token.id,
+            symbol: token.symbol,
+            name: token.name,
+            large: token.large,
+            current_price: token.current_price
+          });
+          // If we have a current price, update the purchase price field
+          if (token.current_price) {
+            setPurchasePrice(token.current_price.toString());
+          }
+        } else {
+          setSelectedToken(null);
+        }
+      }}
+      selectedToken={selectedToken}
+    />
+  </div>
+)}
 
-      {selectedToken && (
-        <Card className="p-4 bg-muted/50">
-          <div className="flex items-center gap-3">
-            <div className="relative w-10 h-10">
-              <Image
-                src={selectedToken.image || `/api/placeholder/40/40?text=${selectedToken.symbol}`}
-                alt={selectedToken.name}
-                width={40}
-                height={40}
-                className="rounded-full"
-              />
-            </div>
-            <div>
-              <div className="font-medium">{selectedToken.name}</div>
-              <div className="text-sm text-muted-foreground">{selectedToken.symbol.toUpperCase()}</div>
-            </div>
-          </div>
-        </Card>
-      )}
+      
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Purchase Price */}
@@ -565,14 +531,11 @@ export default function TradesPage() {
           Purchase Date
         </Label>
         <div className="relative">
-          <CalendarIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="date"
-            value={purchaseDate}
-            onChange={(e) => setPurchaseDate(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-            required
-          />
+          <DatePicker
+              value={purchaseDate}
+              onChange={setPurchaseDate}
+              className="w-full p-2"
+            />
         </div>
       </div>
 

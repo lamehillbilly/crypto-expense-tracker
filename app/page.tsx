@@ -8,21 +8,40 @@ import { ChevronDown, ChevronUp, DollarSign, TrendingUp, PiggyBank, Receipt, Plu
 import { toast } from 'sonner';
 import { NewEntryDialog } from '@/components/NewEntryDialog';
 
+interface Trade {
+  id?: number;
+  tokenId: string;
+  tokenSymbol: string;
+  tokenName: string;
+  tokenImage?: string;
+  purchasePrice: number;
+  quantity: number;
+  purchaseDate: string;
+  currentPrice?: number;
+  unrealizedPnl?: number;
+  realizedPnl?: number;
+  status: 'open' | 'closed';
+}
+
 const Dashboard: React.FC = () => {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [selectedType, setSelectedType] = useState<TransactionType | ''>('');
   const [amount, setAmount] = useState<string>('');
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [txn, setTxn] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expenseDetails, setExpenseDetails] = useState<ExpenseDetails>({ 
     description: '', 
     vendor: '', 
-    taxDeductible: false 
+    taxDeductible: false,
+    color: '',
+    icon: ''
   });
   const [showCharts, setShowCharts] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [showTaxDeductible, setShowTaxDeductible] = useState(false);
-
+  
+  
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -35,20 +54,15 @@ const Dashboard: React.FC = () => {
         const tradesResponse = await fetch('/api/trades');
         if (!tradesResponse.ok) throw new Error('Failed to load trades');
         const tradesData = await tradesResponse.json();
+        setTrades(tradesData.trades);
 
-        // Convert trades to entries format
-        const tradeEntries = tradesData.trades.map((trade: any) => ({
-          id: trade.id,
-          type: 'Trade',
-          amount: trade.purchasePrice * trade.quantity,
-          date: trade.purchaseDate,
-          tokenSymbol: trade.tokenSymbol,
-          pnl: trade.realizedPnl,
-          status: trade.status
+        // When combining entries, ensure regular entries have unique IDs
+        const regularEntries = entriesData.map((entry: any) => ({
+          ...entry,
+          id: `entry-${entry.id}`
         }));
 
-        // Combine entries and trades
-        setEntries([...entriesData, ...tradeEntries]);
+        setEntries(regularEntries);
       } catch (error) {
         console.error('Error loading data:', error);
         toast.error('Failed to load some data');
@@ -57,6 +71,8 @@ const Dashboard: React.FC = () => {
 
     loadData();
   }, []);
+  
+  
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -90,7 +106,7 @@ const Dashboard: React.FC = () => {
       setSelectedType('');
       setAmount('');
       setTxn('');
-      setExpenseDetails({ description: '', vendor: '', taxDeductible: false });
+      setExpenseDetails({ description: '', vendor: '', taxDeductible: false, color: '', icon: '' });
       setShowNewEntry(false);
       toast.success('Entry added successfully');
     } catch (error) {
@@ -107,15 +123,17 @@ const Dashboard: React.FC = () => {
     if (entry.expenseDetails) setExpenseDetails(entry.expenseDetails);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
-      const response = await fetch(`/api/entries/${id}`, {
+      // Extract the numeric ID from the prefixed string
+      const numericId = parseInt(id.split('-')[1]);
+      const response = await fetch(`/api/entries/${numericId}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) throw new Error('Failed to delete entry');
       
-      // Remove entry from state
+      // Remove entry from state using the full ID string
       setEntries(prev => prev.filter(entry => entry.id !== id));
     } catch (error) {
       console.error('Error deleting entry:', error);
@@ -135,12 +153,12 @@ const Dashboard: React.FC = () => {
       .filter(entry => entry.type === 'Claims')
       .reduce((sum, entry) => sum + entry.amount, 0);
 
-    const totalTrades = entries
-      .filter(entry => entry.type === 'Trade' && entry.status === 'closed')
-      .reduce((sum, entry) => sum + (entry.pnl || 0), 0);
+    // Calculate total realized P/L from trades
+    const totalTrades = trades
+      .reduce((sum, trade) => sum + (trade.realizedPnl || 0), 0);
 
     return { totalIncome, totalExpenses, totalClaims, totalTrades };
-  }, [entries]);
+  }, [entries, trades]);
 
   const filteredEntries = useMemo(() => {
     return entries.filter(entry => {
@@ -230,18 +248,10 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Analytics Section */}
-      <div className="bg-card rounded-lg">
-        <button
-          onClick={() => setShowCharts(!showCharts)}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-        >
-          <h2 className="text-lg font-semibold">Analytics Overview</h2>
-          {showCharts ? (
-            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-          )}
-        </button>
+      <div className="bg-card rounded-lg pt-10">
+        
+          <h2 className="text-lg font-semibold pb-4">Analytics Overview</h2>
+          
 
         {showCharts && (
           <div className="p-4 pt-0 grid gap-6 md:grid-cols-2">

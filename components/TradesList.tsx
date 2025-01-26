@@ -33,33 +33,31 @@ interface TradeHistory {
   price: number;
   type: 'close' | 'partial_close';
   pnl: number;
-  createdAt: string;
 }
 
 interface Trade {
-  tokenId: string;
-  tokenImage: string;
   id?: number;
+  tokenId: string;
   tokenSymbol: string;
   tokenName: string;
-  purchaseDate: string;
+  tokenImage?: string;
   purchasePrice: number;
   quantity: number;
-  currentPrice?: number;
+  purchaseDate: string;
+  currentPrice: number;
   unrealizedPnl: number;
   realizedPnl: number;
   status: 'open' | 'closed';
-  closeDate?: string;
-  closePrice?: number;
-  tradeHistory?: TradeHistory[];
-  marketCapRank?: number;
+  marketCapRank?: number | null;
   isCustomToken: boolean;
+  tradeHistory?: TradeHistory[];
 }
 
 interface TradesListProps {
   trades: Trade[];
   onUpdate: () => void;
 }
+
 
 export function TradesList({ trades, onUpdate }: TradesListProps) {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
@@ -209,7 +207,7 @@ export function TradesList({ trades, onUpdate }: TradesListProps) {
 
       setSelectedTrade(trade);
       setCloseAmount(trade.quantity.toString());
-      setClosePrice(trade.currentPrice?.toString() || trade.purchasePrice.toString());
+      setClosePrice(trade.currentPrice.toString());
       setIsClosing(true);
     } catch (error) {
       console.error('Error editing trade:', error);
@@ -251,46 +249,60 @@ export function TradesList({ trades, onUpdate }: TradesListProps) {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-8 h-8">
-                        <Image
-                          src={trade.tokenImage || `https://assets.coingecko.com/coins/images/${trade.tokenId}/small.png`}
-                          alt={trade.tokenName || trade.tokenSymbol}
-                          width={32}
-                          height={32}
-                          className="rounded-full"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = `data:image/svg+xml,${encodeURIComponent(
-                              `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-                                <rect width="32" height="32" fill="#f0f0f0"/>
-                                <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="12" fill="#666">
-                                  ${trade.tokenSymbol.slice(0, 3)}
-                                </text>
-                              </svg>`
-                            )}`;
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div className="font-medium">
-                          {trade.tokenSymbol}
-                          {trade.marketCapRank && (
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              #{trade.marketCapRank}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-muted-foreground">{trade.tokenName}</div>
-                      </div>
-                    </div>
-                  </TableCell>
+  <div className="flex items-center gap-3">
+    <div className="relative w-8 h-8">
+      {trade.tokenImage ? (
+        <Image
+          src={trade.tokenImage}
+          alt={trade.tokenName}
+          width={32}
+          height={32}
+          className="rounded-full"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = `data:image/svg+xml,${encodeURIComponent(
+              `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                <rect width="32" height="32" fill="#f0f0f0"/>
+                <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-size="12" fill="#666">
+                  ${trade.tokenSymbol.slice(0, 3)}
+                </text>
+              </svg>`
+            )}`;
+          }}
+        />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <span className="text-xs font-medium text-muted-foreground">
+            {trade.tokenSymbol.slice(0, 3)}
+          </span>
+        </div>
+      )}
+    </div>
+    <div>
+      <div className="font-medium">
+        {trade.tokenSymbol}
+        {trade.marketCapRank && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            #{trade.marketCapRank}
+          </span>
+        )}
+      </div>
+      <div className="text-sm text-muted-foreground">{trade.tokenName}</div>
+    </div>
+  </div>
+</TableCell>
                   <TableCell>{format(new Date(trade.purchaseDate), 'MMM dd, yyyy')}</TableCell>
                   <TableCell>${formatPrice(trade.purchasePrice)}</TableCell>
                   <TableCell>{trade.quantity}</TableCell>
-                  <TableCell>${formatPrice(trade.currentPrice || trade.purchasePrice)}</TableCell>
+                  <TableCell>${formatPrice(trade.currentPrice)}</TableCell>
                   <TableCell>
-                    {trade.status === 'open' ? formatPnL(trade.unrealizedPnl) : '-'}
+                    {trade.status === 'open' 
+                      ? formatPnL(
+                          trade.unrealizedPnl || 
+                          ((trade.currentPrice - trade.purchasePrice) * trade.quantity)
+                        ) 
+                      : '-'
+                    }
                   </TableCell>
                   <TableCell className={trade.status === 'closed' ? 'font-medium' : ''}>
                     {formatPnL(trade.realizedPnl)}

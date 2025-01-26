@@ -9,6 +9,11 @@ import { TokenSelect } from '@/components/TokenSelect';
 import { toast } from 'sonner';
 import { useTokens } from '@/hooks/useTokens';
 import { Token } from '@/types';
+import TokenLogo from './TokenLogo';
+import { Trash2Icon } from 'lucide-react';
+import { Calendar } from './ui/calendar';
+import { DatePicker, DatePickerForm } from './DatePicker';
+
 
 interface TokenDetail {
   tokenSymbol: string;
@@ -114,12 +119,10 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Date</label>
-            <input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full p-2 border rounded"
-              required
+              onChange={setDate}
+              className="w-full p-2"
             />
           </div>
 
@@ -128,13 +131,20 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
             {tokenDetails.map((token, index) => (
               <div key={index} className="flex gap-2">
                 <div className="min-w-[120px] p-2 border rounded bg-muted">
+                  <div className="flex items-center gap-2">
+                  <TokenLogo 
+                    tokenId={tokens?.find(t => t.symbol === token.tokenSymbol)?.id}
+                    symbol={token.tokenSymbol}
+                    size="md"
+                  />
                   {token.tokenSymbol}
+                  </div>
                 </div>
                 <input
                   type="number"
                   value={token.amount}
                   onChange={(e) => handleTokenChange(index, 'amount', Number(e.target.value))}
-                  className="w-full p-2 border rounded"
+                  className="w-full p-2 border rounded bg-muted/50"
                   placeholder="Amount"
                   step="0.01"
                   min="0"
@@ -145,7 +155,7 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
                   onClick={() => removeToken(index)}
                   className="p-2 text-red-600 hover:bg-red-50 rounded"
                 >
-                  Remove
+                  <Trash2Icon className="w-4 h-4" />
                 </button>
               </div>
             ))}
@@ -175,7 +185,7 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
               type="number"
               value={taxAmount}
               onChange={(e) => setTaxAmount(Number(e.target.value))}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded bg-muted/50"
               placeholder="Tax amount"
               step="0.01"
               min="0"
@@ -188,7 +198,7 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
               type="url"
               value={txn}
               onChange={(e) => setTxn(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded bg-muted/50"
               placeholder="https://"
             />
           </div>

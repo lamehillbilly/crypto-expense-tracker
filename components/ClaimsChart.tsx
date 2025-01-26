@@ -1,9 +1,9 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { CartesianGrid, Line, LineChart, BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartConfig, ChartLegend, ChartTooltip, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { getAddress } from 'ethers';
+import TokenLogo from './TokenLogo';
 
 interface TokenMetadata {
   id: string;
@@ -44,8 +44,10 @@ const chartConfig = {
 
 function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
 
-  const [tokenColors, setTokenColors] = useState<Record<string, string>>({});
-  const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  const [activeView, setActiveView] = useState('overview');
+  const [tokenColors, setTokenColors] = useState({});
+  const [tokenMetadata, setTokenMetadata] = useState({});
+  
 
   const getTokenColor = (index: number): string => {
     const colors = [
@@ -62,78 +64,10 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
   };
 
   // Color extraction function
-  const getImageColor = useCallback(async (imageUrl: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "Anonymous";
-      
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        if (context) {
-          context.drawImage(img, 0, 0);
-          
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height).data;
-          const colorCounts: Record<string, number> = {};
-          
-          // Sample pixels and count distinct colors
-          for (let i = 0; i < imageData.length; i += 4) {
-            const alpha = imageData[i + 3];
-            if (alpha > 128) { // Only consider mostly opaque pixels
-              const r = imageData[i];
-              const g = imageData[i + 1];
-              const b = imageData[i + 2];
-              
-              // Skip white, black, and very light/dark colors
-              if ((r + g + b) > 740 || (r + g + b) < 20) continue;
-              
-              const key = `${r},${g},${b}`;
-              colorCounts[key] = (colorCounts[key] || 0) + 1;
-            }
-          }
-          
-          // Find the most common color
-          let maxCount = 0;
-          let dominantColor = '0,0,0';
-          
-          Object.entries(colorCounts).forEach(([color, count]) => {
-            if (count > maxCount) {
-              maxCount = count;
-              dominantColor = color;
-            }
-          });
-          
-          const [r, g, b] = dominantColor.split(',').map(Number);
-          resolve(`rgba(${r}, ${g}, ${b}, 0.85)`);
-        } else {
-          resolve(getTokenColor(0));
-        }
-      };
-      
-      img.onerror = () => {
-        resolve(getTokenColor(0));
-      };
-      
-      img.src = imageUrl;
-    });
-  }, []);
+  
 
   // Token logo URL generator with checksummed address
-  const getTokenLogoUrl = useCallback((tokenId: string) => {
-    if (!tokenId) return '';
-    try {
-      const checksumAddress = getAddress(tokenId);
-      return `https://raw.githubusercontent.com/RamsesExchange/ramses-assets/main/blockchains/avalanche/assets/${checksumAddress}/logo.png`;
-    } catch (error) {
-      console.error('Error converting address to checksum format:', error);
-      return '';
-    }
-  }, []);
-
-
+  
 
   // Default color generator for fallback
   const getDefaultTokenColor = (index: number): string => {
@@ -151,41 +85,6 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
   };
 
   // Fetch token metadata and colors
-  useEffect(() => {
-    const fetchTokenData = async () => {
-      try {
-        const response = await fetch('https://pharaoh-api-production.up.railway.app/tokens');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const tokens: TokenMetadata[] = await response.json();
-        
-        const tokenMap: Record<string, TokenMetadata> = {};
-        const colorPromises: Promise<[string, string]>[] = [];
-
-        tokens.forEach(token => {
-          if (token.symbol && token.id) {
-            tokenMap[token.symbol] = token;
-            const logoUrl = getTokenLogoUrl(token.id);
-            colorPromises.push(
-              getImageColor(logoUrl).then(color => [token.symbol, color])
-            );
-          }
-        });
-
-        setTokenMetadata(tokenMap);
-
-        // Wait for all colors to be extracted
-        const colors = await Promise.all(colorPromises);
-        const colorMap = Object.fromEntries(colors);
-        setTokenColors(colorMap);
-      } catch (error) {
-        console.error('Error fetching token metadata:', error);
-      }
-    };
-
-    fetchTokenData();
-  }, [getTokenLogoUrl, getImageColor]);
 
   // Chart data processing
   const chartData = useMemo(() => {
@@ -257,7 +156,7 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
     });
     return Array.from(symbols);
   }, [data]);
-
+  
   // Formatting functions
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -275,9 +174,25 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
       year: timeframe === 'week' ? 'numeric' : undefined
     });
   };
-
+  const total = useMemo(
+    () => ({
+      overview: chartData.reduce((acc, curr) => acc + (curr.total || 0), 0),
+      breakdown: chartData.reduce((acc, curr) => acc + (curr.total || 0), 0),
+    }),
+    [chartData]
+  );
   const formatValue = (value: number) => {
     return `$${value.toLocaleString()}`;
+  };
+  const chartConfig = {
+    overview: {
+      label: "Overview",
+      color: "hsl(var(--chart-1))",
+    },
+    breakdown: {
+      label: "Token Breakdown",
+      color: "hsl(var(--chart-2))",
+    },
   };
 
   // Custom components
@@ -286,11 +201,6 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
     payload, 
     label,
     isStacked = false
-  }: { 
-    active?: boolean; 
-    payload?: Array<{ payload: any; value: number; name: string; color: string }>; 
-    label?: string;
-    isStacked?: boolean;
   }) => {
     if (active && payload && payload.length > 0) {
       const data = payload[0].payload;
@@ -307,27 +217,23 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
                 </p>
                 <p className="text-sm flex justify-between items-center font-medium">
                   <span>Trend:</span>
-                  <span>{formatValue(data.trend)}</span>
+                  <span>{formatValue(data.trend || 0)}</span>
                 </p>
               </>
             ) : (
               <div className="space-y-1">
-                {payload.map((entry, index) => {
-                  const token = tokenMetadata[entry.name];
+                {payload.map((entry: { name: string; color: string; value: number }, index: number) => {
+                  const token = tokenMetadata[entry.name as keyof typeof tokenMetadata];
                   return (
                     <p key={index} className="text-sm flex justify-between items-center">
                       <span className="flex items-center gap-2">
-                        {token && (
-                          <img 
-                            src={getTokenLogoUrl(token.id)}
-                            alt={token.symbol}
-                            className="w-4 h-4 rounded-full"
-                            onError={(e) => {
-                              console.log(`Failed to load logo for ${token.symbol}:`, getTokenLogoUrl(token.id));
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        )}
+                      {token && (
+                        <TokenLogo 
+                          tokenId={token.id}
+                          symbol={token.symbol}
+                          size="sm"
+                        />
+)}
                         <span style={{ color: entry.color }}>{entry.name}:</span>
                       </span>
                       <span style={{ color: entry.color }}>{formatValue(entry.value)}</span>
@@ -353,130 +259,127 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
   }
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>Claims Overview</CardTitle>
-        <CardDescription>
-          {timeframe === 'day' ? 'Daily' : 
-           timeframe === 'week' ? 'Weekly' : 
-           'Monthly'} claim analysis
-        </CardDescription>
+    <Card>
+      <CardHeader className="flex flex-col items-stretch space-y-0 border-b p-0 sm:flex-row">
+        <div className="flex flex-1 flex-col justify-center gap-1 px-6 py-5 sm:py-6">
+          <CardTitle>Claims Analysis</CardTitle>
+          <CardDescription>
+            {timeframe === 'day' ? 'Daily' : timeframe === 'week' ? 'Weekly' : 'Monthly'} claim overview
+          </CardDescription>
+        </div>
+        <div className="flex">
+          {['overview', 'breakdown'].map((view) => (
+            <button
+              key={view}
+              data-active={activeView === view}
+              className="relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l data-[active=true]:bg-muted/50 sm:border-l sm:border-t-0 sm:px-8 sm:py-6"
+              onClick={() => setActiveView(view)}
+            >
+              <span className="text-lg text-primary">
+                {chartConfig[view as keyof typeof chartConfig].label}
+              </span>
+            </button>
+          ))}
+        </div>
       </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="breakdown">Token Breakdown</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview">
-            <ChartContainer config={chartConfig}>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={chartData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={formatDate}
-                      minTickGap={timeframe === 'month' ? 60 : 30}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                      interval={timeframe === 'month' ? 0 : 'preserveStartEnd'}
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                    />
-                    <YAxis
-                      tickFormatter={formatValue}
-                      domain={['auto', 'auto']}
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="Total Claims"
-                      stroke="var(--color-total)"
-                      strokeWidth={2}
-                      dot={{
-                        fill: "var(--color-total)",
-                      }}
-                      activeDot={{
-                        r: 6,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="trend"
-                      name="Trend"
-                      stroke="var(--color-trend)"
-                      strokeWidth={2}
-                      dot={false}
-                      strokeDasharray="5 5"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </ChartContainer>
-          </TabsContent>
-          <TabsContent value="breakdown">
-            <ChartContainer config={chartConfig}>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 16, right: 16, left: 0, bottom: 16 }}
-                  >
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={formatDate}
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={10}
-                    />
-                    <YAxis
-                      tickFormatter={formatValue}
-                      axisLine={false}
-                      tickLine={false}
-                      tickMargin={8}
-                    />
-                    <Tooltip content={(props) => <CustomTooltip {...props} isStacked={true} />} />
-                    
-                    {tokenSymbols
-                      .sort((a, b) => {
-                        // Get the total value for each token across all dates
-                        const totalA = chartData.reduce((sum, entry) => sum + (entry.tokenTotals[a] || 0), 0);
-                        const totalB = chartData.reduce((sum, entry) => sum + (entry.tokenTotals[b] || 0), 0);
-                        // Sort in ascending order (smaller values at bottom)
-                        return totalA - totalB;
-                      })
-                      .map((symbol, index) => (
-                        <Bar
-                          key={symbol}
-                          dataKey={`tokenTotals.${symbol}`}
-                          name={symbol}
-                          stackId="tokens"
-                          fill={tokenColors[symbol] || getDefaultTokenColor(index)}
-                          radius={[
-                            index === tokenSymbols.length - 1 ? 4 : 0,  // top-left: round only if it's the last bar
-                            index === tokenSymbols.length - 1 ? 4 : 0,  // top-right: round only if it's the last bar
-                            index === 1 ? 4 : 0,                        // bottom-right: round only if it's the first bar
-                            index === 1 ? 4 : 0                         // bottom-left: round only if it's the first bar
-                          ]}
-                        />
-                      ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </ChartContainer>
-          </TabsContent>
-        </Tabs>
+      <CardContent className="px-2 sm:p-6">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[250px] w-full"
+        >
+          {activeView === 'overview' ? (
+            <LineChart
+              data={chartData}
+              margin={{
+                left: 12,
+                right: 12,
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={32}
+                tickFormatter={formatDate}
+              />
+              <YAxis
+                tickFormatter={formatValue}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={8}
+              />
+              <Line
+                type="monotone"
+                dataKey="total"
+                stroke="var(--color-overview)"
+                strokeWidth={2}
+                dot={{
+                  fill: "var(--color-overview)",
+                }}
+                activeDot={{
+                  r: 6,
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="trend"
+                stroke="var(--color-trend)"
+                strokeWidth={2}
+                dot={false}
+                strokeDasharray="5 5"
+              />
+              <Tooltip content={<CustomTooltip />} />
+            </LineChart>
+          ) : (
+            <BarChart
+              data={chartData}
+              margin={{
+                left: 12,
+                right: 12,
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={32}
+                tickFormatter={formatDate}
+              />
+              <YAxis
+                tickFormatter={formatValue}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={8}
+              />
+              <Tooltip content={(props) => <CustomTooltip {...props} isStacked={true} />} />
+              {tokenSymbols
+                .sort((a, b) => {
+                  const totalA = chartData.reduce((sum, entry) => sum + (entry.tokenTotals?.[a] || 0), 0);
+                  const totalB = chartData.reduce((sum, entry) => sum + (entry.tokenTotals?.[b] || 0), 0);
+                  return totalA - totalB;
+                })
+                .map((symbol, index) => (
+                  <Bar
+                    key={symbol}
+                    dataKey={`tokenTotals.${symbol}`}
+                    name={symbol}
+                    stackId="tokens"
+                    fill={tokenColors[symbol] || getDefaultTokenColor(index)}
+                    radius={[
+                      index === tokenSymbols.length - 1 ? 4 : 0,
+                      index === tokenSymbols.length - 1 ? 4 : 0,
+                      index === 0 ? 4 : 0,
+                      index === 0 ? 4 : 0
+                    ]}
+                  />
+                ))}
+            </BarChart>
+          )}
+        </ChartContainer>
       </CardContent>
     </Card>
   );

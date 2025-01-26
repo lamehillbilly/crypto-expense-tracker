@@ -1,3 +1,5 @@
+// In app/api/trades/[id]/close/route.ts
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -6,110 +8,95 @@ export async function POST(
   context: { params: { id: string } }
 ) {
   try {
-    const { id } = context.params;  // Destructure id from context.params
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Trade ID is required' },
-        { status: 400 }
-      );
-    }
-
+    const { id } = await context.params;
     const tradeId = parseInt(id);
-    if (isNaN(tradeId)) {
+    
+    console.log('Processing close trade request for ID:', tradeId);
+
+    if (!tradeId || isNaN(tradeId)) {
+      console.log('Invalid trade ID:', id);
       return NextResponse.json(
         { error: 'Invalid trade ID' },
         { status: 400 }
       );
     }
 
-    // Parse the request body
     const body = await request.json();
+    console.log('Close trade request body:', body);
+
     const { closeAmount, closePrice, isFullClose, pnl, date } = body;
 
-    // Validate the trade exists
-    const existingTrade = await prisma.trade.findUnique({
+    // Find the trade first
+    const trade = await prisma.trade.findUnique({
       where: { id: tradeId }
     });
 
-    if (!existingTrade) {
+    console.log('Found trade:', trade);
+
+    if (!trade) {
+      console.log('Trade not found for ID:', tradeId);
       return NextResponse.json(
         { error: 'Trade not found' },
         { status: 404 }
       );
     }
 
-    // Execute the transaction
+    // Start a transaction
     const result = await prisma.$transaction(async (tx) => {
-      console.log('Closing trade with data:', {
-        tradeId,
-        closeAmount,
-        closePrice,
-        isFullClose,
-        pnl,
-        date
-      });
-
       // Create trade history entry
-      const tradeHistory = await tx.tradeHistory.create({
+      const history = await tx.tradeHistory.create({
         data: {
           tradeId,
           date: new Date(date),
           amount: closeAmount,
           price: closePrice,
           type: isFullClose ? 'close' : 'partial_close',
-          pnl,
-        },
+          pnl
+        }
       });
 
-      console.log('Created trade history:', tradeHistory);
+      console.log('Created trade history:', history);
 
       // Update the trade
-      const updatedTrade = await tx.trade.update({
-        where: { id: tradeId },
-        data: {
-          quantity: isFullClose ? 0 : {
-            decrement: closeAmount
-          },
-          status: isFullClose ? 'closed' : 'open',
-          closePrice: isFullClose ? closePrice : null,
-          closeDate: isFullClose ? new Date(date) : null,
-          realizedPnl: {
-            increment: pnl
-          }
-        },
-      });
-
-      console.log('Updated trade:', updatedTrade);
-
-      // Create PnL record if fully closed
       if (isFullClose) {
-        const pnlRecord = await tx.pnlRecord.create({
+        return await tx.trade.update({
+          where: { id: tradeId },
           data: {
-            date: new Date(date),
-            tokenSymbol: updatedTrade.tokenSymbol,
-            amount: pnl,
-            taxEstimate: pnl > 0 ? pnl * 0.35 : 0,
-            tradeId: tradeId
+            status: 'closed',
+            closePrice,
+            closeDate: new Date(date),
+            realizedPnl: {
+              increment: pnl
+            },
+            quantity: 0
           }
         });
-        console.log('Created PnL record:', pnlRecord);
+      } else {
+        // For partial close
+        return await tx.trade.update({
+          where: { id: tradeId },
+          data: {
+            quantity: {
+              decrement: closeAmount
+            },
+            realizedPnl: {
+              increment: pnl
+            }
+          }
+        });
       }
-
-      return { trade: updatedTrade, history: tradeHistory };
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      ...result 
-    });
+    console.log('Transaction completed successfully:', result);
+    return NextResponse.json(result);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to close trade:', { error: errorMessage });
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to close trade',
-      details: errorMessage
-    }, { status: 500 });
+    console.error('Error in close trade route:', error);
+    return NextResponse.json(
+      { 
+        error: error instanceof Error ? error.message : 'Failed to close trade',
+        details: error instanceof Error ? error.stack : undefined
+      },
+      { status: 500 }
+    );
   }
-} 
+}

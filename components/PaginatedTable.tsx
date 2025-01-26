@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CategoryBadge } from './CategoryBadge';
 
 interface PaginatedTableProps {
   entries: Entry[];
@@ -300,71 +301,61 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
 
         {/* Table Section */}
         <div className="relative rounded-lg border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="font-semibold">Date</TableHead>
-                <TableHead className="font-semibold">Type</TableHead>
-                <TableHead className="font-semibold">Token/Description</TableHead>
-                <TableHead className="font-semibold">Amount/P&L</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
-                <TableHead className="font-semibold">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentEntries.map((entry) => (
-                <TableRow key={entry.id} className="hover:bg-muted/50">
-                  <TableCell className="py-3">{format(new Date(entry.date), 'MMM dd, yyyy')}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{entry.type}</Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[300px] truncate">
-                    {entry.type === 'Trade' ? (
-                      <span className="font-medium">{entry.tokenSymbol}</span>
-                    ) : (
-                      entry.expenseDetails?.description
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {entry.type === 'Trade' ? (
-                      formatPnL(entry.pnl)
-                    ) : (
-                      <span className="font-medium">${entry.amount.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {entry.type === 'Trade' ? (
-                      <Badge variant={entry.status === 'open' ? 'success' : 'secondary'}>
-                        {entry.status}
-                      </Badge>
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onEdit(entry)}
-                        className="h-8 w-8"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onDelete(entry.id!)}
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>))}
-            </TableBody>
-          </Table>
+        <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Date</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Amount</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {entries.map((entry) => (
+          <TableRow key={entry.id}>
+            <TableCell>
+              {new Date(entry.date).toLocaleDateString()}
+            </TableCell>
+            <TableCell>{entry.type}</TableCell>
+            <TableCell>
+              {entry.type === 'Expense' && entry.expenseDetails?.category && (
+                <CategoryBadge
+                  name={entry.expenseDetails.category}
+                  icon={entry.expenseDetails.icon}
+                  color={entry.expenseDetails.color}
+                  size="sm"
+                />
+              )}
+            </TableCell>
+            <TableCell>${entry.amount.toFixed(2)}</TableCell>
+            <TableCell>
+              {entry.expenseDetails?.description || '-'}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(entry)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive"
+                  onClick={() => onDelete(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
         </div>
 
         {/* Empty State */}

@@ -1,17 +1,23 @@
+// app/api/categories/[categoryId]/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { category: string } }
+  { params }: { params: { categoryId: string } }
 ) {
   try {
-    const categoryName = decodeURIComponent(params.category);
+    const id = parseInt(params.categoryId);
+    
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { error: 'Invalid category ID' },
+        { status: 400 }
+      );
+    }
 
     await prisma.category.delete({
-      where: {
-        name: categoryName
-      }
+      where: { id }
     });
 
     return NextResponse.json({ success: true });
@@ -22,4 +28,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}

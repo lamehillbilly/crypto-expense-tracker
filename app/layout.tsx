@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Toaster } from 'sonner';
 import { Navigation } from "@/components/Navigation";
+import { TokenLogoProvider } from '@/contexts/TokenLogoContext';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,21 +22,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen bg-background`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <Navigation />
-          <main className="min-h-screen bg-background text-foreground">
-            {children}
-            <div className="fixed bottom-4 right-4 z-50">
-              <ModeToggle />
-            </div>
-          </main>
-          <Toaster richColors closeButton position="top-right" />
-        </ThemeProvider>
+        <TokenLogoProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <Navigation />
+            <main className="min-h-screen bg-background text-foreground">
+              {children}
+              <div className="fixed bottom-4 right-4 z-50">
+                <ModeToggle />
+              </div>
+            </main>
+            <Toaster richColors closeButton position="top-right" />
+          </ThemeProvider>
+        </TokenLogoProvider>
       </body>
     </html>
   );

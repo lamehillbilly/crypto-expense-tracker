@@ -1,7 +1,7 @@
 // app/claims/page.tsx
 'use client';
 import EnhancedClaimsStats from '@/components/StatsCards';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TokenSelect } from '@/components/TokenSelect';
 import ClaimsChart from '@/components/ClaimsChart';
 import { useTokens } from '@/hooks/useTokens';
@@ -30,8 +30,11 @@ import {
   LinkIcon, 
   X 
 } from "lucide-react";
-import Image from "next/image";
 import { getAddress } from 'ethers'
+import TokenLogo from '@/components/TokenLogo';
+import { DatePicker } from '@/components/DatePicker';
+
+
 
 interface ClaimEntry {
   tokenId: string;
@@ -46,6 +49,14 @@ const getLocalDateString = (date: Date = new Date()) => {
   const localDate = new Date(date.getTime() - (offset * 60 * 1000));
   return localDate.toISOString().split('T')[0];
 };
+interface TokenMetadata {
+  id: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  price: number;
+}
+
 
 export default function ClaimsPage() {
   const { tokens } = useTokens();
@@ -59,22 +70,55 @@ export default function ClaimsPage() {
   const [claims, setClaims] = useState<Entry[]>([]);
   const [txn, setTxn] = useState<string>('');
   const [isNewClaimOpen, setIsNewClaimOpen] = useState(false);
-  const [imageError, setImageError] = useState<Record<string, boolean>>({})
+  const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  
+  
+  
+  
+  // Add this near the top of ClaimsPage component
+useEffect(() => {
+  const fetchClaims = async () => {
+    try {
+      const response = await fetch('/api/claims');
+      if (!response.ok) throw new Error('Failed to fetch claims');
+      const data = await response.json();
+      setClaims(data);
+    } catch (error) {
+      console.error('Error fetching claims:', error);
+      toast.error('Failed to load claims');
+    }
+  };
 
+  fetchClaims();
+}, []); // Empty dependency array means this runs once on mount
+  
+  // Load token metadata when tokens are selected
   useEffect(() => {
-    const fetchClaims = async () => {
+    const fetchTokenMetadata = async () => {
+      if (selectedTokens.length === 0) return;
+      
       try {
-        const response = await fetch('/api/claims');
-        if (!response.ok) throw new Error('Failed to fetch claims');
-        const data = await response.json();
-        console.log('Fetched claims data:', data); // Debug log
-        setClaims(data);
+        const response = await fetch('https://pharaoh-api-production.up.railway.app/tokens');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const tokens: TokenMetadata[] = await response.json();
+        
+        const tokenMap: Record<string, TokenMetadata> = {};
+        tokens.forEach(token => {
+          if (token.symbol && token.id) {
+            tokenMap[token.symbol] = token;
+          }
+        });
+
+        setTokenMetadata(tokenMap);
       } catch (error) {
-        console.error('Error fetching claims:', error);
+        console.error('Error fetching token metadata:', error);
       }
     };
-    fetchClaims();
-  }, []);
+
+    fetchTokenMetadata();
+  }, [selectedTokens]);
 
   const handleTokenAmountChange = (tokenId: string, amount: number) => {
     setClaimEntries(prev => {
@@ -162,24 +206,25 @@ export default function ClaimsPage() {
     }
   }
 
-  const getTokenImage = (address: string) => {
-    return `https://raw.githubusercontent.com/RamsesExchange/ramses-assets/main/blockchains/avalanche/assets/${address}/logo.png`
-  }
 
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-8">
         <EnhancedClaimsStats claims={claims} />
+        
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold text-card-foreground">Claims Overview</h2>
-          <Button 
-            onClick={() => setIsNewClaimOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Claim
-          </Button>
-        </div>
+  <h2 className="text-xl font-bold text-card-foreground">Claims Overview</h2>
+  <div className="flex gap-2">
+    
+    <Button 
+      onClick={() => setIsNewClaimOpen(true)}
+      className="flex items-center gap-2"
+    >
+      <Plus className="h-4 w-4" />
+      New Claim
+    </Button>
+  </div>
+</div>
         <div className="bg-card rounded-lg shadow h-[500px] ">
           <div className="p-6">
             <div className="flex justify-end items-center mb-4">
@@ -233,84 +278,71 @@ export default function ClaimsPage() {
           Date
         </Label>
         <div className="relative">
-          <CalendarIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-            required
-          />
+          <DatePicker
+              value={date}
+              onChange={setDate}
+              className="w-full p-2"
+            />
         </div>
       </div>
 
       {/* Token Selection */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">Selected Tokens</Label>
-        <Card className="p-4 bg-muted/50">
-          <div className="space-y-3">
-            {selectedTokens.map(token => (
-              <div key={token.id} className="flex items-center gap-4">
-                <div className="w-24 flex items-center gap-2">
-                  {imageError[token.address] ? (
-                    <div className="w-6 h-6 rounded-full bg-muted-foreground/10 flex items-center justify-center">
-                      <span className="text-xs font-medium">
-                        {token.symbol.slice(0, 2).toUpperCase()}
-                      </span>
-                    </div>
-                  ) : (
-                    <Image
-                      src={getTokenImage(token.address)}
-                      alt={token.symbol}
-                      width={24}
-                      height={24}
-                      className="rounded-full"
-                      onError={() => {
-                        setImageError(prev => ({
-                          ...prev,
-                          [token.address]: true
-                        }))
-                      }}
-                    />
-                  )}
-                  <span className="font-medium">{token.symbol}</span>
-                </div>
-                <div className="relative flex-1">
-                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    onChange={(e) => handleTokenAmountChange(token.id, parseFloat(e.target.value))}
-                    className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="0.00"
+    <Label className="text-sm font-medium">Selected Tokens</Label>
+    <Card className="p-4 bg-muted/50">
+      <div className="space-y-3">
+        {selectedTokens.map(token => {
+          const metadata = tokenMetadata[token.symbol];
+          
+          return (
+            <div key={token.id} className="flex items-center gap-4">
+              <div className="w-24 flex items-center gap-2">
+                {metadata && (
+                  <TokenLogo 
+                    tokenId={metadata.id}
+                    symbol={token.symbol}
+                    size="md"
                   />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedTokens(tokens => tokens.filter(t => t.id !== token.id))}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                )}
+                <span className="font-medium">{token.symbol}</span>
               </div>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <TokenSelect
-              tokens={tokens}
-              selectedTokens={selectedTokens}
-              onTokensChange={(token: Token) => {
-                if (!selectedTokens.find(t => t.id === token.id)) {
-                  setSelectedTokens([...selectedTokens, token]); 
-                }
-              }}
-            />
-          </div>
-        </Card>
+              <div className="relative flex-1">
+                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  onChange={(e) => handleTokenAmountChange(token.id, parseFloat(e.target.value))}
+                  className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="0.00"
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedTokens(tokens => tokens.filter(t => t.id !== token.id))}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          );
+        })}
       </div>
+
+      <div className="mt-4">
+        <TokenSelect
+          tokens={tokens}
+          selectedTokens={selectedTokens}
+          onTokensChange={(token: Token) => {
+            if (!selectedTokens.find(t => t.id === token.id)) {
+              setSelectedTokens([...selectedTokens, token]); 
+            }
+          }}
+        />
+      </div>
+    </Card>
+  </div>
 
       {/* Transaction URL */}
       <div className="space-y-2">
@@ -342,34 +374,34 @@ export default function ClaimsPage() {
       <Separator />
 
       {/* Tax Withholding Section */}
-<div>
-<div className="flex items-center gap-2">
-<input
-type="checkbox"
-id="heldForTaxes"
-checked={heldForTaxes}
-onChange={(e) => setHeldForTaxes(e.target.checked)}
-className="h-4 w-4 rounded border-muted-foreground/25"
-/>
-<Label htmlFor="heldForTaxes" className="text-foreground">
-Hold amount for taxes
-</Label>
-</div>
-{heldForTaxes && (
-<div className="mt-2 relative">
-<span className="absolute left-3 top-2.5">$</span>
-<input
-type="number"
-step="0.01"
-min="0"
-value={taxAmount}
-onChange={(e) => setTaxAmount(parseFloat(e.target.value))}
-className="w-full pl-8 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-placeholder="Tax amount to hold"
-/>
-</div>
-)}
-</div>
+        <div>
+        <div className="flex items-center gap-2">
+        <input
+        type="checkbox"
+        id="heldForTaxes"
+        checked={heldForTaxes}
+        onChange={(e) => setHeldForTaxes(e.target.checked)}
+        className="h-4 w-4 rounded border-muted-foreground/25"
+        />
+        <Label htmlFor="heldForTaxes" className="text-foreground">
+        Hold amount for taxes
+        </Label>
+        </div>
+        {heldForTaxes && (
+        <div className="mt-2 relative">
+        <span className="absolute left-3 top-2.5">$</span>
+        <input
+        type="number"
+        step="0.01"
+        min="0"
+        value={taxAmount}
+        onChange={(e) => setTaxAmount(parseFloat(e.target.value))}
+        className="w-full pl-8 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+        placeholder="Tax amount to hold"
+        />
+        </div>
+        )}
+        </div>
 
       {/* Summary Section */}
       <Card className="p-4">

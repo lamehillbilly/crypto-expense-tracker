@@ -106,7 +106,6 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    // First, test the database connection
     await prisma.$connect();
 
     const trades = await prisma.trade.findMany({
@@ -122,14 +121,17 @@ export async function GET() {
       }
     });
 
-    // Calculate total realized PnL
-    const totalRealizedPnL = trades.reduce((sum, trade) => sum + (trade.realizedPnl || 0), 0);
+    // Map the trades to include tradeHistory
+    const tradesWithHistory = trades.map(trade => ({
+      ...trade,
+      tradeHistory: trade.TradeHistory
+    }));
 
-    // Calculate total tax estimate (example: 30% of realized gains)
+    const totalRealizedPnL = trades.reduce((sum, trade) => sum + (trade.realizedPnl || 0), 0);
     const totalTaxEstimate = Math.max(0, totalRealizedPnL * 0.30);
 
     return NextResponse.json({
-      trades,
+      trades: tradesWithHistory,
       totalRealizedPnL,
       totalTaxEstimate
     });
