@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, Upload, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const ImportExportClaims = ({ onImportSuccess }) => {
+  const transformTokenTotalsToDetails = (tokenTotals) => {
+    return Object.entries(tokenTotals).map(([tokenSymbol, amount]) => ({
+      tokenSymbol,
+      amount: Number(amount)
+    }));
+  };
+
   const handleFileUpload = useCallback(async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -20,54 +27,126 @@ const ImportExportClaims = ({ onImportSuccess }) => {
 
     try {
       let data;
-      if (file.name.endsWith('.csv')) {
-        // Handle CSV
+      if (file.name.endsWith('.json')) {
+        const text = await file.text();
+        const jsonData = JSON.parse(text);
+        
+        // Transform the data to match the expected format
+        data = jsonData.map(entry => ({
+          date: entry.date.split('T')[0], // Extract just the date part
+          tokenDetails: transformTokenTotalsToDetails(entry.tokenTotals),
+          totalAmount: entry.totalAmount,
+          heldForTaxes: false,
+          taxAmount: 0,
+          txn: entry.txn
+        }));
+      } else if (file.name.endsWith('.csv')) {
         const text = await file.text();
         const result = Papa.parse(text, {
           header: true,
           dynamicTyping: true,
           skipEmptyLines: true
         });
-        data = result.data;
-      } else if (file.name.endsWith('.json')) {
-        // Handle JSON
-        const text = await file.text();
-        data = JSON.parse(text);
+        // Transform CSV data
+        data = result.data.map(row => {
+          const { date, totalAmount, txn, ...tokenColumns } = row;
+          const tokenDetails = Object.entries(tokenColumns)
+            .filter(([key, value]) => value && !['date', 'totalAmount', 'txn'].includes(key))
+            .map(([tokenSymbol, amount]) => ({
+              tokenSymbol,
+              amount: Number(amount)
+            }));
+          
+          return {
+            date: date.split('T')[0],
+            tokenDetails,
+            totalAmount: Number(totalAmount),
+            heldForTaxes: false,
+            taxAmount: 0,
+            txn
+          };
+        });
       } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        // Handle Excel
         const buffer = await file.arrayBuffer();
         const workbook = XLSX.read(buffer, {
           type: 'array',
           cellDates: true,
           dateNF: 'yyyy-mm-dd'
         });
-        data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        
+        // Transform Excel data
+        data = rawData.map(row => {
+          const { date, totalAmount, txn, ...tokenColumns } = row;
+          const tokenDetails = Object.entries(tokenColumns)
+            .filter(([key, value]) => value && !['date', 'totalAmount', 'txn'].includes(key))
+            .map(([tokenSymbol, amount]) => ({
+              tokenSymbol,
+              amount: Number(amount)
+            }));
+          
+          return {
+            date: new Date(date).toISOString().split('T')[0],
+            tokenDetails,
+            totalAmount: Number(totalAmount),
+            heldForTaxes: false,
+            taxAmount: 0,
+            txn
+          };
+        });
       } else {
         throw new Error('Unsupported file format');
       }
 
-      // Validate and format data
-      const formattedData = data.map(row => ({
-        date: row.date,
-        tokenDetails: Array.isArray(row.tokenDetails) ? row.tokenDetails : [],
-        totalAmount: parseFloat(row.totalAmount),
-        heldForTaxes: Boolean(row.heldForTaxes),
-        taxAmount: row.taxAmount ? parseFloat(row.taxAmount) : undefined,
-        txn: row.txn
-      }));
+      // Import claims one by one with progress tracking
+      const results = { success: 0, failed: 0, errors: [] };
+      const importPromises = data.map(async (claim, index) => {
+        try {
+          const response = await fetch('/api/claims', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(claim),
+          });
 
-      // Send to API
-      const response = await fetch('/api/claims/bulk', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formattedData),
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.details || `Failed to import claim for ${claim.date}`);
+          }
+
+          results.success++;
+          // Update loading toast with progress
+          toast.loading(
+            `Importing claims: ${index + 1}/${data.length}`,
+            { id: loadingToast }
+          );
+          
+          return await response.json();
+        } catch (error) {
+          results.failed++;
+          results.errors.push({
+            date: claim.date,
+            error: error.message
+          });
+        }
       });
 
-      if (!response.ok) throw new Error('Failed to import claims');
+      await Promise.all(importPromises);
 
-      toast.success('Claims imported successfully!', { id: loadingToast });
+      // Show final results
+      if (results.failed > 0) {
+        toast.error(`Import completed with errors`, {
+          id: loadingToast,
+          description: `Successfully imported ${results.success} claims, failed to import ${results.failed} claims.`
+        });
+        console.error('Failed imports:', results.errors);
+      } else {
+        toast.success(`Successfully imported ${results.success} claims!`, {
+          id: loadingToast
+        });
+      }
+
       onImportSuccess?.();
 
     } catch (error) {
@@ -105,19 +184,16 @@ const ImportExportClaims = ({ onImportSuccess }) => {
       const dateStr = new Date().toISOString().split('T')[0];
       
       if (format === 'csv') {
-        // Create CSV
-        const csv = Papa.unparse(claims.map(claim => ({
+        const csvData = claims.map(claim => ({
           date: claim.date,
           totalAmount: claim.totalAmount,
-          heldForTaxes: claim.heldForTaxes,
-          taxAmount: claim.taxAmount,
-          txn: claim.txn,
-          tokenDetails: JSON.stringify(claim.tokenDetails)
-        })));
+          ...claim.tokenTotals,
+          txn: claim.txn
+        }));
         
+        const csv = Papa.unparse(csvData);
         downloadFile(csv, `claims-export-${dateStr}.csv`, 'text/csv');
       } else if (format === 'json') {
-        // Create JSON with proper formatting
         const json = JSON.stringify(claims, null, 2);
         downloadFile(json, `claims-export-${dateStr}.json`, 'application/json');
       }

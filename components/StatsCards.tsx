@@ -7,6 +7,19 @@ const EnhancedClaimsStats = ({ claims }) => {
     sum + claim.totalAmount, 0
   );
 
+  // Calculate current month's total
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+  
+  const currentMonthTotal = claims.reduce((sum, claim) => {
+    const claimDate = new Date(claim.date);
+    if (claimDate.getMonth() === currentMonth && claimDate.getFullYear() === currentYear) {
+      return sum + claim.totalAmount;
+    }
+    return sum;
+  }, 0);
+
   const aggregatedTokens = claims.reduce((acc, claim) => {
     if (claim.tokenTotals) {
       Object.entries(claim.tokenTotals).forEach(([token, amount]) => {
@@ -31,6 +44,11 @@ const EnhancedClaimsStats = ({ claims }) => {
   const targetTaxAmount = totalClaimed * 0.20;
   const taxDifference = totalTaxHeld - targetTaxAmount;
 
+  // Function to get month name
+  const getMonthName = (date = new Date()) => {
+    return date.toLocaleString('default', { month: 'long' });
+  };
+
   return (
     <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
       <div className="lg:col-span-2 grid grid-cols-2 gap-4">
@@ -44,7 +62,7 @@ const EnhancedClaimsStats = ({ claims }) => {
               <CreditCard className="h-8 w-8 text-primary" />
             </div>
             <div className="text-sm text-muted-foreground">
-              Total amount claimed across all tokens
+              You've claimed <span className="font-bold">${currentMonthTotal.toFixed(2)}</span> this {getMonthName()}!
             </div>
           </CardContent>
         </Card>
@@ -72,7 +90,6 @@ const EnhancedClaimsStats = ({ claims }) => {
       </Card>
       </div>
 
-      
       <Card className="h-[200px]">
           <CardContent className="h-full flex flex-col justify-between pt-6">
             <div className="flex items-center justify-between">

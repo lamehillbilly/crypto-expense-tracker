@@ -22,6 +22,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CategoryBadge } from './CategoryBadge';
+import { cn } from '@/lib/utils';
 
 interface PaginatedTableProps {
   entries: Entry[];
@@ -80,6 +81,7 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
   });
   const [sortField, setSortField] = useState<SortableFields>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -111,13 +113,14 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
         
         if (filters.searchFields.description) {
           matches.push(
-            entry.expenseDetails?.description?.toLowerCase().includes(searchLower) || false
+            entry.expenseDetails?.description?.toLowerCase().includes(searchLower) || false,
+            entry.expenseDetails?.vendor?.toLowerCase().includes(searchLower) || false
           );
         }
         
         if (filters.searchFields.tokenSymbol) {
           matches.push(
-            entry.tokenSymbol?.toLowerCase().includes(searchLower) || false
+            entry.tradeDetails?.tokenSymbol?.toLowerCase().includes(searchLower) || false
           );
         }
         
@@ -301,61 +304,94 @@ export function PaginatedTable({ entries, onDelete, onEdit }: PaginatedTableProp
 
         {/* Table Section */}
         <div className="relative rounded-lg border overflow-hidden">
-        <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Category</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead>Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {entries.map((entry) => (
-          <TableRow key={entry.id}>
-            <TableCell>
-              {new Date(entry.date).toLocaleDateString()}
-            </TableCell>
-            <TableCell>{entry.type}</TableCell>
-            <TableCell>
-              {entry.type === 'Expense' && entry.expenseDetails?.category && (
-                <CategoryBadge
-                  name={entry.expenseDetails.category}
-                  icon={entry.expenseDetails.icon}
-                  color={entry.expenseDetails.color}
-                  size="sm"
-                />
-              )}
-            </TableCell>
-            <TableCell>${entry.amount.toFixed(2)}</TableCell>
-            <TableCell>
-              {entry.expenseDetails?.description || '-'}
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onEdit(entry)}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Transaction</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentEntries.map((entry) => (
+                <TableRow 
+                  key={entry.id}
+                  className={cn(
+                    "group cursor-pointer transition-colors hover:bg-muted/50",
+                    selectedRow === entry.id && "bg-muted"
+                  )}
+                  onClick={() => setSelectedRow(selectedRow === entry.id ? null : entry.id)}
                 >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive"
-                  onClick={() => onDelete(entry.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                  <TableCell>
+                    {new Date(entry.date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>{entry.type}</TableCell>
+                  <TableCell>
+                    {entry.type === 'Expense' && entry.expenseDetails?.category && (
+                      <CategoryBadge
+                        name={entry.expenseDetails.category}
+                        icon={entry.expenseDetails.icon}
+                        color={entry.expenseDetails.color}
+                        size="sm"
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell>${entry.amount.toFixed(2)}</TableCell>
+                  <TableCell>
+                    {entry.details?.description || entry.expenseDetails?.description || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {entry.txn ? (
+                      <a
+                        href={entry.txn}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:text-primary/80 inline-flex items-center gap-1"
+                      >
+                        View <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className={cn(
+                      "flex items-center gap-2 opacity-0 transition-opacity",
+                      (selectedRow === entry.id || "group-hover:opacity-100")
+                    )}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(entry as Entry);
+                        }}
+                        className="h-8 w-8 p-0 hover:bg-background"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(entry.id);
+                        }}
+                        className="h-8 w-8 p-0 hover:bg-destructive/10 text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Empty State */}

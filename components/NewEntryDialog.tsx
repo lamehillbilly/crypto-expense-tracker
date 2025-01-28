@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExpenseForm } from '@/components/ExpenseForm';
-import { ExpenseDetails, TransactionType } from '@/types';
+import { ExpenseDetails, TransactionType, Entry } from '@/types';
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { DialogFooter } from "@/components/ui/dialog";
 
 interface NewEntryDialogProps {
   open: boolean;
@@ -17,6 +21,7 @@ interface NewEntryDialogProps {
   setDate: (date: string) => void;
   expenseDetails: ExpenseDetails;
   setExpenseDetails: (details: ExpenseDetails) => void;
+  editingEntry: Entry | null;
 }
 
 export function NewEntryDialog({
@@ -33,14 +38,36 @@ export function NewEntryDialog({
   setDate,
   expenseDetails,
   setExpenseDetails,
+  editingEntry
 }: NewEntryDialogProps) {
   const TYPES: TransactionType[] = ['Expense', 'Trades', 'Income'];
+
+  useEffect(() => {
+    if (editingEntry) {
+      setSelectedType(editingEntry.type);
+      setAmount(editingEntry.amount.toString());
+      setDate(editingEntry.date);
+      setTxn(editingEntry.txn || '');
+      if (editingEntry.details) {
+        setExpenseDetails({
+          description: editingEntry.details.description || '',
+          category: editingEntry.details.category || '',
+          vendor: editingEntry.details.vendor || '',
+          taxDeductible: editingEntry.details.taxDeductible || false,
+          icon: editingEntry.details.icon || '',
+          color: editingEntry.details.color || '',
+        });
+      }
+    }
+  }, [editingEntry]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Entry</DialogTitle>
+          <DialogTitle>
+            {editingEntry ? 'Edit Entry' : 'New Entry'}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -105,6 +132,18 @@ export function NewEntryDialog({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Input
+              value={expenseDetails.description}
+              onChange={(e) => setExpenseDetails(prev => ({
+                ...prev,
+                description: e.target.value
+              }))}
+              placeholder="Enter description"
+            />
+          </div>
+
           {selectedType === 'Expense' && (
             <ExpenseForm
               details={expenseDetails}
@@ -120,12 +159,9 @@ export function NewEntryDialog({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Add Entry
-            </button>
+            <Button type="submit">
+              {editingEntry ? 'Save Changes' : 'Add Entry'}
+            </Button>
           </div>
         </form>
       </DialogContent>

@@ -146,7 +146,7 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
                   onChange={(e) => handleTokenChange(index, 'amount', Number(e.target.value))}
                   className="w-full p-2 border rounded bg-muted/50"
                   placeholder="Amount"
-                  step="0.01"
+                  step="any"
                   min="0"
                   required
                 />
@@ -183,11 +183,10 @@ export function EditClaimDialog({ claim, open, onClose, onUpdate }: EditClaimDia
             <label className="block text-sm font-medium mb-1">Tax Amount</label>
             <input
               type="number"
-              value={taxAmount}
               onChange={(e) => setTaxAmount(Number(e.target.value))}
               className="w-full p-2 border rounded bg-muted/50"
-              placeholder="Tax amount"
-              step="0.01"
+              
+              step="any"
               min="0"
             />
           </div>

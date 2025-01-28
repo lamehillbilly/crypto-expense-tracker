@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,14 +17,27 @@ interface Category {
   color?: string;
 }
 
+interface ExpenseEntry {
+  id: number;
+  type: 'Expense' | 'Income';
+  amount: number;
+  date: string;
+  txn?: string | null;
+  expenseDetails?: {
+    category?: string;
+    description?: string;
+  } | null;
+}
+
 interface NewExpenseDialogProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (formData: any) => Promise<void>;
   categories: Category[];
+  editingEntry: ExpenseEntry | null;
 }
 
-export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewExpenseDialogProps) {
+export function NewExpenseDialog({ open, onClose, onSuccess, categories, editingEntry }: NewExpenseDialogProps) {
   const [type, setType] = useState<'Expense' | 'Income'>('Expense');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -33,42 +46,58 @@ export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewEx
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (editingEntry) {
+      setType(editingEntry.type);
+      setAmount(editingEntry.amount.toString());
+      setDate(editingEntry.date);
+      setTxn(editingEntry.txn || '');
+      
+      if (editingEntry.expenseDetails) {
+        setSelectedCategory(editingEntry.expenseDetails.category || '');
+        setDescription(editingEntry.expenseDetails.description || '');
+      }
+    } else {
+      resetForm();
+    }
+  }, [editingEntry]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
+    
+    if (!amount || Number(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
 
     if (type === 'Expense' && !selectedCategory) {
-      toast.error('Please select a category');
+      toast.error('Please select a category for expense');
       return;
     }
 
+    const formData = {
+      type,
+      amount: Number(amount),
+      date,
+      txn: txn || null,
+      details: {
+        description,
+        ...(type === 'Expense' ? {
+          category: selectedCategory,
+          vendor: '',
+          taxDeductible: false,
+          icon: '',
+          color: '',
+        } : {})
+      }
+    };
+
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          amount: parseFloat(amount),
-          date,
-          txn: txn || undefined,
-          expenseDetails: type === 'Expense' ? {
-            category: selectedCategory,
-            description: description || undefined
-          } : undefined
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to create entry');
-
-      toast.success('Entry added successfully');
-      resetForm();
-      onSuccess();
+      await onSuccess(formData);
     } catch (error) {
-      toast.error('Failed to add entry');
+      console.error('Error submitting form:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save entry');
     } finally {
       setIsSubmitting(false);
     }
@@ -90,7 +119,9 @@ export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewEx
     }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New {type}</DialogTitle>
+          <DialogTitle>
+            {editingEntry ? `Edit ${type}` : `New ${type}`}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -114,12 +145,18 @@ export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewEx
                 <Input
                   type="number"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  step="0.01"
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Preserve all decimal places from the input
+                    setAmount(value);
+                  }}
+                  placeholder="0.000000"
+                  step="0.00000001"  // Allow up to 6 decimal places
                   min="0"
                   required
                   className="pl-9"
+                  // Allow any decimal input without rounding
+                  onWheel={(e) => e.currentTarget.blur()} // Prevent mousewheel from changing value
                 />
               </div>
             </div>
@@ -146,45 +183,43 @@ export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewEx
               />
             </div>
 
-            {type === 'Expense' && (
-              <>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Category</label>
-                  <ScrollArea className="h-32 w-full rounded-md  ">
-                    <div className="flex flex-wrap gap-2 p-4">
-                      {categories.map((cat) => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => setSelectedCategory(cat.name)}
-                          className="focus:outline-none"
-                        >
-                          <CategoryBadge
-                            name={cat.name}
-                            icon={cat.icon}
-                            color={cat.color}
-                            className={`cursor-pointer transition-opacity hover:opacity-80 ${
-                              selectedCategory === cat.name 
-                                ? 'ring-2 ring-primary ring-offset-2' 
-                                : 'opacity-60'
-                            }`}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description"
+                className="mt-1"
+              />
+            </div>
 
-                <div>
-                  <label className="text-sm font-medium">Description</label>
-                  <Textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Optional description"
-                    className="mt-1"
-                  />
-                </div>
-              </>
+            {type === 'Expense' && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Category</label>
+                <ScrollArea className="h-32 w-full rounded-md">
+                  <div className="flex flex-wrap gap-2 p-4">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(cat.name)}
+                        className="focus:outline-none"
+                      >
+                        <CategoryBadge
+                          name={cat.name}
+                          icon={cat.icon}
+                          color={cat.color}
+                          className={`cursor-pointer transition-opacity hover:opacity-80 ${
+                            selectedCategory === cat.name 
+                              ? 'ring-2 ring-primary ring-offset-2' 
+                              : 'opacity-60'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             )}
           </div>
 
@@ -193,7 +228,7 @@ export function NewExpenseDialog({ open, onClose, onSuccess, categories }: NewEx
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save Entry'}
+              {isSubmitting ? 'Saving...' : editingEntry ? 'Update' : 'Save Entry'}
             </Button>
           </div>
         </form>

@@ -34,6 +34,7 @@ export default function ExpensesPage() {
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingEntry, setEditingEntry] = useState<ExpenseEntry | null>(null);
 
   const fetchData = async () => {
     try {
@@ -95,6 +96,49 @@ export default function ExpensesPage() {
       monthlyExpenses
     };
   }, [entries]);
+
+  const handleEdit = async (entry: ExpenseEntry) => {
+    setEditingEntry(entry);
+    setShowNewEntry(true);
+  };
+
+  const handleSubmit = async (formData: any) => {
+    try {
+      // Validate the form data
+      if (!formData.type || !formData.amount || !formData.date) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+
+      const endpoint = editingEntry 
+        ? `/api/expenses/${editingEntry.id}`
+        : '/api/expenses';
+      
+      const method = editingEntry ? 'PUT' : 'POST';
+
+      console.log('Submitting data:', formData); // Debug log
+
+      const response = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save entry');
+      }
+
+      await fetchData();
+      setShowNewEntry(false);
+      setEditingEntry(null);
+      toast.success(`Entry ${editingEntry ? 'updated' : 'created'} successfully`);
+    } catch (error) {
+      console.error('Error saving entry:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save entry');
+    }
+  };
 
   return (
     <div className="container mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
@@ -158,12 +202,13 @@ export default function ExpensesPage() {
       {showNewEntry && (
         <NewExpenseDialog
           open={showNewEntry}
-          onClose={() => setShowNewEntry(false)}
-          onSuccess={() => {
-            fetchData();
+          onClose={() => {
             setShowNewEntry(false);
+            setEditingEntry(null);
           }}
+          onSuccess={handleSubmit}
           categories={categories}
+          editingEntry={editingEntry}
         />
       )}
 
@@ -190,6 +235,7 @@ export default function ExpensesPage() {
               toast.error('Failed to delete entry');
             }
           }}
+          onEdit={handleEdit}
         />
       </div>
     </div>

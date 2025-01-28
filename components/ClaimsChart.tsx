@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { getAddress } from 'ethers';
 import TokenLogo from './TokenLogo';
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface TokenMetadata {
   id: string;
@@ -24,7 +25,7 @@ interface ChartProps {
   timeframe: 'day' | 'week' | 'month';
 }
 
-interface GroupedData {
+export interface GroupedData {
   date: string;
   total: number;
   tokenTotals: Record<string, number>;
@@ -45,46 +46,47 @@ const chartConfig = {
 function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
 
   const [activeView, setActiveView] = useState('overview');
-  const [tokenColors, setTokenColors] = useState({});
   const [tokenMetadata, setTokenMetadata] = useState({});
-  
-
-  const getTokenColor = (index: number): string => {
-    const colors = [
-      'hsl(var(--chart-1))',
-      'hsl(var(--chart-2))',
-      'hsl(var(--chart-3))',
-      'hsl(var(--chart-4))',
-      'hsl(var(--chart-5))',
-      'hsl(var(--chart-6))',
-      'hsl(var(--chart-7))',
-      'hsl(var(--chart-8))',
-    ];
-    return colors[index % colors.length];
-  };
-
-  // Color extraction function
-  
-
-  // Token logo URL generator with checksummed address
   
 
   // Default color generator for fallback
   const getDefaultTokenColor = (index: number): string => {
-    const colors = [
-      'hsl(var(--chart-1))',
-      'hsl(var(--chart-2))',
-      'hsl(var(--chart-3))',
-      'hsl(var(--chart-4))',
-      'hsl(var(--chart-5))',
-      'hsl(var(--chart-6))',
-      'hsl(var(--chart-7))',
-      'hsl(var(--chart-8))',
+    // Base HSL colors with higher luminosity for dark backgrounds
+    const baseColors = [
+      'hsl(210, 100%, 65%)',  // Bright blue
+      'hsl(150, 100%, 65%)',  // Bright green
+      'hsl(280, 100%, 70%)',  // Bright purple
+      'hsl(30, 100%, 65%)',   // Bright orange
+      'hsl(340, 100%, 70%)',  // Bright pink
+      'hsl(180, 100%, 65%)',  // Bright cyan
+      'hsl(60, 100%, 65%)',   // Bright yellow
+      'hsl(0, 100%, 65%)',    // Bright red
+      'hsl(240, 100%, 70%)',  // Bright indigo
+      'hsl(120, 100%, 65%)',  // Bright emerald
+      'hsl(300, 100%, 70%)',  // Bright magenta
+      'hsl(90, 100%, 65%)',   // Bright lime
     ];
-    return colors[index % colors.length];
-  };
 
-  // Fetch token metadata and colors
+    // Generate variations by rotating hue and adjusting saturation/lightness
+    const variations = baseColors.flatMap(color => {
+      const hue = parseInt(color.match(/hsl\((\d+)/)?.[1] || '0');
+      return [
+        color,
+        `hsl(${(hue + 15) % 360}, 90%, 70%)`,
+        `hsl(${(hue + 30) % 360}, 85%, 65%)`,
+      ];
+    });
+
+    // Ensure we never run out of colors by cycling through variations
+    const colorIndex = index % variations.length;
+    const baseColor = variations[colorIndex];
+
+    // Add slight opacity variation to differentiate repeated colors
+    const cycle = Math.floor(index / variations.length);
+    const opacity = Math.max(0.7, 1 - cycle * 0.15);
+
+    return baseColor.replace('hsl', 'hsla').replace(')', `, ${opacity})`);
+  };
 
   // Chart data processing
   const chartData = useMemo(() => {
@@ -101,12 +103,26 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
       
       switch (timeframe) {
         case 'week':
-          const monday = new Date(localDate);
-          monday.setDate(date.getDate() - date.getDay() + 1);
-          key = monday.toISOString().split('T')[0];
+          // Get day of week (0-6, Sunday-Saturday)
+          const dayOfWeek = date.getUTCDay();
+          const daysToThursday = dayOfWeek >= 4 ? dayOfWeek - 4 : dayOfWeek + 3;
+          const thursday = new Date(Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate() - daysToThursday,
+            0, 0, 0, 0
+          ));
+          key = thursday.toISOString().split('T')[0];
           break;
         case 'month':
-          key = `${localDate.getMonth() + 1}/${localDate.getFullYear()}`;
+          // Group by first day of month, adjusting for UTC
+          const monthDate = new Date(Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth() + 1, // Add 1 to get correct month
+            1,
+            0, 0, 0, 0
+          ));
+          key = monthDate.toISOString().split('T')[0];
           break;
         default:
           key = localDate.toISOString().split('T')[0];
@@ -163,7 +179,9 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
     const localDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
     
     if (timeframe === 'month') {
-      return localDate.toLocaleDateString('default', { 
+      // Adjust the month display
+      const monthDate = new Date(dateStr); // Parse the ISO string
+      return monthDate.toLocaleDateString('default', { 
         month: 'short',
         year: 'numeric'
       });
@@ -200,14 +218,54 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
     active, 
     payload, 
     label,
-    isStacked = false
+    isStacked = false,
+    timeframe
+  }: {
+    active: boolean;
+    payload?: Array<any>;
+    label?: string;
+    isStacked?: boolean;
+    timeframe: 'day' | 'week' | 'month';
   }) => {
     if (active && payload && payload.length > 0) {
       const data = payload[0].payload;
       
+      // Format date range for weekly/monthly view
+      const formatDateRange = (dateStr: string) => {
+        if (!dateStr) return '';
+        
+        const date = new Date(dateStr);
+        
+        switch (timeframe) {
+          case 'week':
+            const thursday = new Date(dateStr);
+            const nextWed = new Date(thursday);
+            nextWed.setDate(thursday.getDate() + 6);
+            return `${thursday.toLocaleDateString('default', { 
+              month: 'short',
+              day: 'numeric'
+            })} - ${nextWed.toLocaleDateString('default', { 
+              month: 'short',
+              day: 'numeric'
+            })}`;
+          
+          case 'month':
+            const monthDate = new Date(dateStr); // Parse the ISO string
+            return monthDate.toLocaleDateString('default', { 
+              month: 'short',
+              year: 'numeric'
+            });
+            
+          default:
+            return formatDate(dateStr);
+        }
+      };
+
       return (
         <Card className="p-3 min-w-[200px] border shadow-lg bg-muted/75">
-          <p className="font-semibold border-b pb-2 mb-2">{formatDate(label || '')}</p>
+          <p className="font-semibold border-b pb-2 mb-2">
+            {formatDateRange(label || '')}
+          </p>
           <div className="space-y-2">
             {!isStacked ? (
               <>
@@ -289,49 +347,49 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
         >
           {activeView === 'overview' ? (
             <LineChart
-              data={chartData}
-              margin={{
-                left: 12,
-                right: 12,
+            data={chartData}
+            margin={{
+              left: 12,
+              right: 12,
+            }}
+          >
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              minTickGap={32}
+              tickFormatter={formatDate}
+            />
+            <YAxis
+              tickFormatter={formatValue}
+              axisLine={false}
+              tickLine={false}
+              tickMargin={8}
+            />
+            <Line
+              type="monotone"
+              dataKey="total"
+              stroke="hsl(var(--chart-1))"
+              strokeWidth={2}
+              dot={{
+                fill: "hsl(var(--chart-1))",
               }}
-            >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={32}
-                tickFormatter={formatDate}
-              />
-              <YAxis
-                tickFormatter={formatValue}
-                axisLine={false}
-                tickLine={false}
-                tickMargin={8}
-              />
-              <Line
-                type="monotone"
-                dataKey="total"
-                stroke="var(--color-overview)"
-                strokeWidth={2}
-                dot={{
-                  fill: "var(--color-overview)",
-                }}
-                activeDot={{
-                  r: 6,
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="trend"
-                stroke="var(--color-trend)"
-                strokeWidth={2}
-                dot={false}
-                strokeDasharray="5 5"
-              />
-              <Tooltip content={<CustomTooltip />} />
-            </LineChart>
+              activeDot={{
+                r: 6,
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="trend"
+              stroke="hsl(var(--chart-2))"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="5 5"
+            />
+            <Tooltip content={<CustomTooltip timeframe={timeframe} />} />
+          </LineChart>
           ) : (
             <BarChart
               data={chartData}
@@ -355,20 +413,23 @@ function TabbedClaimsChart({ data = [], timeframe }: ChartProps) {
                 tickLine={false}
                 tickMargin={8}
               />
-              <Tooltip content={(props) => <CustomTooltip {...props} isStacked={true} />} />
+              <Tooltip content={(props) => <CustomTooltip {...props} isStacked={true} timeframe={timeframe} />} />
               {tokenSymbols
                 .sort((a, b) => {
                   const totalA = chartData.reduce((sum, entry) => sum + (entry.tokenTotals?.[a] || 0), 0);
                   const totalB = chartData.reduce((sum, entry) => sum + (entry.tokenTotals?.[b] || 0), 0);
-                  return totalA - totalB;
+                  return totalB - totalA; // Changed to sort descending
                 })
+                .filter(symbol => // Add this filter
+                  chartData.some(entry => (entry.tokenTotals?.[symbol] || 0) > 0)
+                )
                 .map((symbol, index) => (
                   <Bar
                     key={symbol}
                     dataKey={`tokenTotals.${symbol}`}
                     name={symbol}
                     stackId="tokens"
-                    fill={tokenColors[symbol] || getDefaultTokenColor(index)}
+                    fill={getDefaultTokenColor(index)}  // Remove tokenColors reference
                     radius={[
                       index === tokenSymbols.length - 1 ? 4 : 0,
                       index === tokenSymbols.length - 1 ? 4 : 0,

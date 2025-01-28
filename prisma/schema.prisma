@@ -36,7 +36,7 @@ model Entry {
   amount         Float
   date           DateTime
   txn            String?
-  expenseDetails Json?
+  details        Json?
   claimDetails   Json?
   purchaseAmount Float    @default(0)
   purchaseDate   DateTime @default(now())

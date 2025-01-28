@@ -75,9 +75,10 @@ export default function ClaimsPage() {
   
   
   
+  
+  
   // Add this near the top of ClaimsPage component
-useEffect(() => {
-  const fetchClaims = async () => {
+  const refreshClaims = useCallback(async () => {
     try {
       const response = await fetch('/api/claims');
       if (!response.ok) throw new Error('Failed to fetch claims');
@@ -87,11 +88,12 @@ useEffect(() => {
       console.error('Error fetching claims:', error);
       toast.error('Failed to load claims');
     }
-  };
+  }, []);
 
-  fetchClaims();
-}, []); // Empty dependency array means this runs once on mount
-  
+   // Empty dependency array means this runs once on mount
+   useEffect(() => {
+    refreshClaims();
+  }, [refreshClaims]);
   // Load token metadata when tokens are selected
   useEffect(() => {
     const fetchTokenMetadata = async () => {
@@ -120,23 +122,26 @@ useEffect(() => {
     fetchTokenMetadata();
   }, [selectedTokens]);
 
-  const handleTokenAmountChange = (tokenId: string, amount: number) => {
+  const handleTokenAmountChange = (tokenId: string, amount: string) => {
     setClaimEntries(prev => {
       const newEntries = prev.filter(entry => entry.tokenId !== tokenId);
-      if (amount > 0) {
+      // Convert to number but maintain precision
+      const numericAmount = parseFloat(amount);
+      
+      if (!isNaN(numericAmount) && numericAmount >= 0) {
         const token = tokens.find(t => t.id === tokenId);
         if (token) {
           newEntries.push({
             tokenId,
             tokenSymbol: token.symbol,
-            amount
+            amount: numericAmount
           });
         }
       }
       return newEntries;
     });
-
-    // Update total amount
+  
+    // Update total amount with full precision
     const newTotal = claimEntries.reduce((sum, entry) => sum + entry.amount, 0);
     setTotalAmount(newTotal);
   };
@@ -246,17 +251,12 @@ useEffect(() => {
         </div>
         
         <div className="mt-8 space-y-8 pt-16">
-          <ClaimsList 
+        <ClaimsList 
             claims={claims.map(claim => ({
               ...claim,
               id: String(claim.id)
             })) as Claim[]}
-            onClaimUpdate={() => {
-              fetch('/api/claims')
-                .then(response => response.json())
-                .then(data => setClaims(data))
-                .catch(error => console.error('Error fetching claims:', error));
-            }} 
+            onClaimUpdate={refreshClaims} 
           />
         </div>
         
@@ -309,13 +309,12 @@ useEffect(() => {
               <div className="relative flex-1">
                 <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  onChange={(e) => handleTokenAmountChange(token.id, parseFloat(e.target.value))}
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="0.00"
-                />
+                type="number"
+                onChange={(e) => handleTokenAmountChange(token.id, e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="0.00"
+                step="any"  // Allow any decimal precision
+              />
               </div>
               <Button
                 variant="ghost"
@@ -352,12 +351,14 @@ useEffect(() => {
         <div className="relative">
           <LinkIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <input
-            type="url"
-            value={txn}
-            onChange={(e) => setTxn(e.target.value)}
-            placeholder="Paste transaction URL here"
-            className="w-full pl-9 pr-10 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
+              type="url"
+              value={txn}
+              onChange={(e) => {
+                setTxn(e.target.value);
+              }}
+              className="w-full pl-8 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder="https://"
+            />
           {txn && (
             <a
               href={txn}
@@ -380,7 +381,12 @@ useEffect(() => {
         type="checkbox"
         id="heldForTaxes"
         checked={heldForTaxes}
-        onChange={(e) => setHeldForTaxes(e.target.checked)}
+        onChange={(e) => {
+          setHeldForTaxes(e.target.checked);
+          if (!e.target.checked) {
+            setTaxAmount(0);
+          }
+        }}
         className="h-4 w-4 rounded border-muted-foreground/25"
         />
         <Label htmlFor="heldForTaxes" className="text-foreground">
@@ -392,10 +398,13 @@ useEffect(() => {
         <span className="absolute left-3 top-2.5">$</span>
         <input
         type="number"
-        step="0.01"
+        step="any"
         min="0"
-        value={taxAmount}
-        onChange={(e) => setTaxAmount(parseFloat(e.target.value))}
+        value={taxAmount || ''}
+        onChange={(e) => {
+          const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+          setTaxAmount(isNaN(value) ? 0 : value);
+        }}
         className="w-full pl-8 pr-4 py-2 border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
         placeholder="Tax amount to hold"
         />

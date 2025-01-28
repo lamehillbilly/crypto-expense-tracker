@@ -40,6 +40,7 @@ const Dashboard: React.FC = () => {
   const [showCharts, setShowCharts] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [showTaxDeductible, setShowTaxDeductible] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   
   
   useEffect(() => {
@@ -74,6 +75,11 @@ const Dashboard: React.FC = () => {
   
   
 
+  const handleEdit = (entry: Entry) => {
+    setEditingEntry(entry);
+    setShowNewEntry(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
@@ -83,16 +89,26 @@ const Dashboard: React.FC = () => {
     }
 
     const entryData = {
+      ...(editingEntry?.id ? { id: editingEntry.id } : {}),
       type: selectedType,
       amount: parseFloat(amount),
       date,
       txn: txn || null,
-      expenseDetails: selectedType === 'Expense' ? expenseDetails : null,
+      details: {
+        description: expenseDetails.description,
+        ...(selectedType === 'Expense' ? {
+          category: expenseDetails.category,
+          vendor: expenseDetails.vendor,
+          taxDeductible: expenseDetails.taxDeductible,
+          icon: expenseDetails.icon,
+          color: expenseDetails.color,
+        } : {})
+      }
     };
 
     try {
       const response = await fetch('/api/entries', {
-        method: 'POST',
+        method: editingEntry ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entries: [entryData] }),
       });
@@ -103,24 +119,17 @@ const Dashboard: React.FC = () => {
       setEntries(updatedEntries);
       
       // Reset form
+      setEditingEntry(null);
       setSelectedType('');
       setAmount('');
       setTxn('');
       setExpenseDetails({ description: '', vendor: '', taxDeductible: false, color: '', icon: '' });
       setShowNewEntry(false);
-      toast.success('Entry added successfully');
+      toast.success(`Entry ${editingEntry ? 'updated' : 'added'} successfully`);
     } catch (error) {
       console.error('Error saving entry:', error);
-      toast.error('Failed to save entry');
+      toast.error(`Failed to ${editingEntry ? 'update' : 'save'} entry`);
     }
-  };
-
-  const handleEdit = (entry: Entry) => {
-    setSelectedType(entry.type);
-    setAmount(entry.amount.toString());
-    setDate(entry.date);
-    if (entry.txn) setTxn(entry.txn);
-    if (entry.expenseDetails) setExpenseDetails(entry.expenseDetails);
   };
 
   const handleDelete = async (id: string) => {
@@ -188,7 +197,10 @@ const Dashboard: React.FC = () => {
 
       <NewEntryDialog
         open={showNewEntry}
-        onClose={() => setShowNewEntry(false)}
+        onClose={() => {
+          setShowNewEntry(false);
+          setEditingEntry(null);
+        }}
         onSubmit={handleSubmit}
         selectedType={selectedType}
         setSelectedType={setSelectedType}
@@ -200,6 +212,7 @@ const Dashboard: React.FC = () => {
         setDate={setDate}
         expenseDetails={expenseDetails}
         setExpenseDetails={setExpenseDetails}
+        editingEntry={editingEntry}
       />
 
       {/* Summary Cards */}

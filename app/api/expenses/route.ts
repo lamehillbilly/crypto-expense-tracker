@@ -28,23 +28,40 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { type, amount, date, txn, expenseDetails } = body;
+    const { type, amount, date, txn, details } = body;
 
+    // Debug log
+    console.log('Received data:', { type, amount, date, txn, details });
+
+    // Validate required fields
+    if (!type || amount === undefined || !date) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Create the entry
     const entry = await prisma.entry.create({
       data: {
         type,
         amount: Number(amount),
         date: new Date(date),
         txn: txn || null,
-        expenseDetails: expenseDetails || null,
-        purchaseAmount: 0, // Default value as per your schema
-        status: 'completed'
+        expenseDetails: details,
+        status: 'completed',
+        purchaseAmount: 0,
       }
     });
 
     return NextResponse.json({ success: true, data: entry });
   } catch (error) {
-    console.error('Error creating expense:', error);
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: 'Failed to create expense' },
       { status: 500 }
